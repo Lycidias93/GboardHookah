@@ -118,7 +118,7 @@ class PluginEntry : IXposedHookLoadPackage {
                         }
                         method
                     })?.let {
-                        hookAdapter(it, classLoader)
+//                        hookAdapter(it, classLoader)
                     }
 
                     val methodReadConfigStr = sp.getString(spKeyMethodReadConfig, null)
@@ -207,6 +207,85 @@ class PluginEntry : IXposedHookLoadPackage {
                 }
             )
         }
+
+//        tryHook("aeiz#c") {
+//            findAndHookMethod(
+//                "aeiz",
+//                classLoader,
+//                "c",
+//                String::class.java,
+//                Long::class.java,
+//                object : XC_MethodHook() {
+//                    override fun afterHookedMethod(param: MethodHookParam) {
+//                        val args = param.args
+//                        log("defpackage.aeiz#c, ${args.first()}, ${args.last()}, ${param.result}")
+//                    }
+//                }
+//            )
+//        }
+//        tryHook("aeiv#c") {
+//            findAndHookMethod(
+//                "aeiv",
+//                classLoader,
+//                "c",
+//                String::class.java,
+//                Long::class.java,
+//                object : XC_MethodHook() {
+//                    override fun afterHookedMethod(param: MethodHookParam) {
+//                        val args = param.args
+//                        log("defpackage.aeiv#c, ${args.first()}, ${args.last()}, ${param.result}")
+//                    }
+//                }
+//            )
+//        }
+
+//        tryHook("jhy#jhy(jhx)") { tag ->
+//            findAndHookConstructor(
+//                "jhy",
+//                classLoader,
+//                "jhx",
+//                object : XC_MethodHook() {
+//                    override fun afterHookedMethod(param: MethodHookParam) {
+//                        log(tag)
+//                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+//                            val instant = XposedHelpers.getObjectField(param.args.first(), "b")
+//                            val epochSecond = XposedHelpers.callMethod(instant, "getEpochSecond") as? Long
+//                            val newEpochSecond =  epochSecond?.let{
+//                                val truncatedSeconds = epochSecond / 10000L * 10000L
+//                                XposedHelpers.callMethod(instant, "ofEpochSecond", truncatedSeconds)
+//                            }
+//                            log("$tag, ${newEpochSecond ?: "123"}")
+//                            XposedHelpers.setObjectField(
+//                                param.thisObject,
+//                                "e",
+//                                newEpochSecond
+//                            )
+//                        } else {
+//                            log("$tag, ${Build.VERSION.SDK_INT}")
+//                        }
+//                    }
+//                }
+//            )
+//        }
+
+        tryHook("HashSet") { tag ->
+            findAndHookMethod(
+                HashSet::class.java,
+                "size",
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val set = param.thisObject as HashSet<*>
+                        if (set.firstOrNull()?.javaClass?.name == "j\$.time.Instant") {
+                            val map = XposedHelpers.getObjectField(set, "map") as HashMap<*, *>
+                            if (map.size <= clipboardTextSize) {
+                                param.result = 5
+                            }
+                        }
+                    }
+                }
+            )
+        }
+
 
 //        tryHook("SQLiteQuery#query") {
 //            findAndHookMethod(
@@ -385,5 +464,27 @@ class PluginEntry : IXposedHookLoadPackage {
 //                    }
                 })
         }
+
+//        tryHook(tag) {
+//            findAndHookMethod(
+//                className, classLoader, "a",
+//                object : XC_MethodHook() {
+////                    override fun beforeHookedMethod(param: MethodHookParam) {
+////                        val name = XposedHelpers.getObjectField(param.thisObject, "a").toString()
+////                        if (name == "enable_clipboard_entity_extraction"
+////                            || name == "enable_clipboard_query_refactoring"
+////                        ) {
+////                            param.result = false
+////                        }
+////                    }
+//
+//                    override fun afterHookedMethod(param: MethodHookParam) {
+//                        val name = XposedHelpers.getObjectField(param.thisObject, "a").toString()
+////                        if (name.contains("clipboard")) {
+//                        log("aadd#a, name=$name, result=${param.result}")
+////                        }
+//                    }
+//                })
+//        }
     }
 }
