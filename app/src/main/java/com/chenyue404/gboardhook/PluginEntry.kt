@@ -419,7 +419,8 @@ class PluginEntry : IXposedHookLoadPackage {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         try {
                             val set = param.thisObject as HashSet<*>
-                            if (set.firstOrNull()?.javaClass?.name == "j\\$.time.Instant") {
+                            val instantClassName = "j" + '$' + ".time.Instant"
+                            if (set.firstOrNull()?.javaClass?.name == instantClassName) {
                                 val map = XposedHelpers.getObjectField(set, "map") as? HashMap<*, *>
                                 if (map != null && map.size <= clipboardTextSize) {
                                     param.result = 5
