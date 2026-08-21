@@ -87,7 +87,6 @@ android {
 
 dependencies {
     implementation 'androidx.core:core-ktx:1.7.0'
-    compileOnly 'de.robv.android.xposed:api:82'
-    compileOnly 'de.robv.android.xposed:api:82:sources'
+    compileOnly project(':xposed-stubs')
     implementation 'org.luckypray:dexkit:2.2.0'
 }
