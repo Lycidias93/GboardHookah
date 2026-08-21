@@ -1,9 +1,10 @@
 <resources>
-    <string name="ignore_package_limit">忽略包名限制（改了Gboard包名的勾上，否则忽略）</string>
-    <string name="log_switch">启用额外调试日志</string>
-    <string name="clipboard_capacity">剪切板容量，默认10</string>
-    <string name="clipboard_expire_time">剪切板保存时间，默认3天，单位毫秒</string>
-    <string name="apply">应用</string>
-    <string name="config_read_failed">读取配置失败</string>
-    <string name="restart_hint">应用之后需要重启Gboard。首次配置可能需要重启手机。GboardHookah: https://github.com/Lycidias93/GboardHookah</string>
+    <string name="ignore_package_limit">Ignore package limit (enable only for renamed Gboard packages)</string>
+    <string name="log_switch">Enable extra debug logging</string>
+    <string name="clipboard_capacity">Clipboard capacity, default 10</string>
+    <string name="sync_android_clipboard_capacity">Sync Android clipboard capacity</string>
+    <string name="clipboard_expire_time">Clipboard expiration time, default 3 days, milliseconds</string>
+    <string name="apply">Apply</string>
+    <string name="config_read_failed">Failed to read configuration</string>
+    <string name="restart_hint">Restart Gboard after applying. First-time setup may require a phone reboot. GboardHookah: https://github.com/Lycidias93/GboardHookah</string>
 </resources>
