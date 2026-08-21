@@ -16,7 +16,6 @@ class MainActivity : Activity() {
 
     companion object {
         private const val SP_KEY_MANUAL_CAPACITY = "manual_clipboard_capacity"
-        private const val AUTO_CAPACITY = Int.MAX_VALUE
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,7 +41,7 @@ class MainActivity : Activity() {
         val storedConfig = pref?.getString(PluginEntry.SP_KEY, null)?.split(",")
         val storedCapacity = storedConfig?.getOrNull(0)?.toIntOrNull()
         val fallbackManualCapacity = when (storedCapacity) {
-            null, AUTO_CAPACITY -> PluginEntry.DEFAULT_NUM
+            null, PluginEntry.AUTO_CAPACITY -> PluginEntry.DEFAULT_NUM
             else -> storedCapacity.coerceAtLeast(1)
         }
         val manualCapacity = pref?.getInt(
@@ -79,17 +78,12 @@ class MainActivity : Activity() {
 
             val manualNum = et0.text.toString().toIntOrNull()?.coerceAtLeast(1)
                 ?: PluginEntry.DEFAULT_NUM
-            val effectiveNum = if (swSyncAndroidClipboardCapacity.isChecked) {
-                AUTO_CAPACITY
-            } else {
-                manualNum
-            }
             val time = et1.text.toString().toLongOrNull()?.coerceAtLeast(0L)
                 ?: PluginEntry.DEFAULT_TIME
             val switchOn = sw0.isChecked.toString()
 
             pref.edit().apply {
-                putString(PluginEntry.SP_KEY, "$effectiveNum,$time,$switchOn")
+                putString(PluginEntry.SP_KEY, "$manualNum,$time,$switchOn")
                 putInt(SP_KEY_MANUAL_CAPACITY, manualNum)
                 putBoolean(PluginEntry.SP_KEY_LOG, swLog.isChecked)
                 putBoolean(
