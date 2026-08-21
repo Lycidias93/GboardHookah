@@ -6,6 +6,7 @@
     <string name="clipboard_expire_time">Clipboard expiration time, default 3 days, milliseconds</string>
     <string name="apply">Apply</string>
     <string name="settings_applied">Settings applied. Restart Gboard for changes to take effect.</string>
+    <string name="settings_applied_auto_capacity">Settings applied. Capacity follows Android clipboard history. Restart Gboard.</string>
     <string name="config_read_failed">Failed to read configuration</string>
     <string name="restart_hint">Restart Gboard after applying. First-time setup may require a phone reboot. GboardHookah: https://github.com/Lycidias93/GboardHookah</string>
 </resources>
