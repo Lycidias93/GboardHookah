@@ -1,9 +1,0 @@
-<resources>
-    <string name="ignore_package_limit">Paketnamenbeschränkung ignorieren (nur aktivieren, wenn Gboard umbenannt wurde)</string>
-    <string name="log_switch">Zusätzliches Debug-Logging aktivieren</string>
-    <string name="clipboard_capacity">Zwischenablagekapazität, Standard 10</string>
-    <string name="clipboard_expire_time">Aufbewahrungszeit der Zwischenablage, Standard 3 Tage, in Millisekunden</string>
-    <string name="apply">Anwenden</string>
-    <string name="config_read_failed">Konfiguration konnte nicht gelesen werden</string>
-    <string name="restart_hint">Nach dem Anwenden muss Gboard neu gestartet werden. Bei der ersten Konfiguration kann ein Neustart des Telefons erforderlich sein. GboardHookah: https://github.com/Lycidias93/GboardHookah</string>
-</resources>
