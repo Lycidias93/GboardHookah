@@ -19,10 +19,12 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
 
         val sw0 = findViewById<Switch>(R.id.sw0)
+        val swLog = findViewById<Switch>(R.id.swLog)
+        val swSyncAndroidClipboardCapacity =
+            findViewById<Switch>(R.id.swSyncAndroidClipboardCapacity)
         val et0 = findViewById<EditText>(R.id.et0)
         val et1 = findViewById<EditText>(R.id.et1)
         val bt0 = findViewById<Button>(R.id.bt0)
-        val swLog = findViewById<Switch>(R.id.swLog)
 
         val pref: SharedPreferences? = try {
             getSharedPreferences(PluginEntry.SP_FILE_NAME, MODE_WORLD_READABLE)
@@ -38,6 +40,10 @@ class MainActivity : Activity() {
             sw0.isChecked = list.getOrNull(2)?.equals("true", true) ?: false
         }
         swLog.isChecked = pref?.getBoolean(PluginEntry.SP_KEY_LOG, false) ?: false
+        swSyncAndroidClipboardCapacity.isChecked = pref?.getBoolean(
+            PluginEntry.SP_KEY_SYNC_ANDROID_CLIPBOARD_CAPACITY,
+            PluginEntry.DEFAULT_SYNC_ANDROID_CLIPBOARD_CAPACITY
+        ) ?: PluginEntry.DEFAULT_SYNC_ANDROID_CLIPBOARD_CAPACITY
 
         bt0.setOnClickListener {
             val num = et0.text.toString().toIntOrNull()?.coerceAtLeast(1)
@@ -48,6 +54,10 @@ class MainActivity : Activity() {
             pref?.edit()?.apply {
                 putString(PluginEntry.SP_KEY, "$num,$time,$switchOn")
                 putBoolean(PluginEntry.SP_KEY_LOG, swLog.isChecked)
+                putBoolean(
+                    PluginEntry.SP_KEY_SYNC_ANDROID_CLIPBOARD_CAPACITY,
+                    swSyncAndroidClipboardCapacity.isChecked
+                )
                 apply()
             }
 
