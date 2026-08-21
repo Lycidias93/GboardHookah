@@ -6,5 +6,6 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "GboardHook"
+rootProject.name = "GboardHookah"
 include ':app'
+include ':xposed-stubs'
