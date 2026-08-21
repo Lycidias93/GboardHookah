@@ -304,7 +304,7 @@ class MainActivity : Activity() {
             appendLine("Debug logging: ${if (debugLogging) "ON" else "OFF"}")
             appendLine("Hook watchers: ${watchers.ifBlank { "none" }}")
             appendLine("Observed query paths: $queryLabel")
-            appendLine("Capacity rewrite proof: $proofLabel")
+            appendLine("Capacity hook proof: $proofLabel")
             append("Errors: $errorLabel")
         }
     }
