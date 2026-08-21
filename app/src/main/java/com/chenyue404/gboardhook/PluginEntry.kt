@@ -37,6 +37,7 @@ class PluginEntry : IXposedHookLoadPackage {
         const val DEFAULT_NUM = 10
         const val DEFAULT_TIME = DAY * 3
         const val DEFAULT_SYNC_ANDROID_CLIPBOARD_CAPACITY = true
+        const val AUTO_CAPACITY = Int.MAX_VALUE
 
         private const val CLIPBOARD_PROVIDER =
             "com.google.android.apps.inputmethod.libs.clipboard.ClipboardContentProvider"
@@ -58,32 +59,37 @@ class PluginEntry : IXposedHookLoadPackage {
         loadLibrary("dexkit")
     }
 
-    private fun getPref(): XSharedPreferences? {
-        val pref = XSharedPreferences(BuildConfig.APPLICATION_ID, SP_FILE_NAME)
-        return if (pref.file.canRead()) pref else null
+    private val modulePreferences by lazy {
+        XSharedPreferences(BuildConfig.APPLICATION_ID, SP_FILE_NAME)
     }
 
-    private val clipboardTextSize by lazy {
-        getPref()?.getString(SP_KEY, null)?.split(",")?.getOrNull(0)?.toIntOrNull()
+    private fun getPref(): XSharedPreferences = modulePreferences
+
+    private val configuredClipboardTextSize by lazy {
+        getPref().getString(SP_KEY, null)?.split(",")?.getOrNull(0)?.toIntOrNull()
             ?.coerceAtLeast(1)
             ?: DEFAULT_NUM
     }
 
     private val clipboardTextTime by lazy {
-        getPref()?.getString(SP_KEY, null)?.split(",")?.getOrNull(1)?.toLongOrNull()
+        getPref().getString(SP_KEY, null)?.split(",")?.getOrNull(1)?.toLongOrNull()
             ?.coerceAtLeast(0L)
             ?: DEFAULT_TIME
     }
 
     private val syncAndroidClipboardCapacity by lazy {
-        getPref()?.getBoolean(
+        getPref().getBoolean(
             SP_KEY_SYNC_ANDROID_CLIPBOARD_CAPACITY,
             DEFAULT_SYNC_ANDROID_CLIPBOARD_CAPACITY
-        ) ?: DEFAULT_SYNC_ANDROID_CLIPBOARD_CAPACITY
+        )
+    }
+
+    private val clipboardTextSize by lazy {
+        if (syncAndroidClipboardCapacity) AUTO_CAPACITY else configuredClipboardTextSize
     }
 
     private val logSwitch by lazy {
-        getPref()?.getBoolean(SP_KEY_LOG, false) ?: false
+        getPref().getBoolean(SP_KEY_LOG, false)
     }
 
     private fun log(str: String) {
@@ -96,7 +102,7 @@ class PluginEntry : IXposedHookLoadPackage {
         val packageName = lpparam.packageName
         val classLoader = lpparam.classLoader
         val ignorePackageLimit = getPref()
-            ?.getString(SP_KEY, null)
+            .getString(SP_KEY, null)
             ?.split(",")
             ?.getOrNull(2)
             ?.equals("true", true) == true
@@ -106,8 +112,8 @@ class PluginEntry : IXposedHookLoadPackage {
         }
 
         log(
-            "handleLoadPackage: $packageName, capacity=$clipboardTextSize, " +
-                "retentionMs=$clipboardTextTime, " +
+            "handleLoadPackage: $packageName, configuredCapacity=$configuredClipboardTextSize, " +
+                "effectiveCapacity=$clipboardTextSize, retentionMs=$clipboardTextTime, " +
                 "syncAndroidCapacity=$syncAndroidClipboardCapacity"
         )
 
