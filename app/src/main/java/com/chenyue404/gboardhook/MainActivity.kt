@@ -46,12 +46,18 @@ class MainActivity : Activity() {
         ) ?: PluginEntry.DEFAULT_SYNC_ANDROID_CLIPBOARD_CAPACITY
 
         bt0.setOnClickListener {
+            if (pref == null) {
+                Toast.makeText(this, R.string.config_read_failed, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
             val num = et0.text.toString().toIntOrNull()?.coerceAtLeast(1)
                 ?: PluginEntry.DEFAULT_NUM
             val time = et1.text.toString().toLongOrNull()?.coerceAtLeast(0L)
                 ?: PluginEntry.DEFAULT_TIME
             val switchOn = sw0.isChecked.toString()
-            pref?.edit()?.apply {
+
+            pref.edit().apply {
                 putString(PluginEntry.SP_KEY, "$num,$time,$switchOn")
                 putBoolean(PluginEntry.SP_KEY_LOG, swLog.isChecked)
                 putBoolean(
@@ -61,12 +67,7 @@ class MainActivity : Activity() {
                 apply()
             }
 
-            startActivity(
-                Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                    addCategory(Intent.CATEGORY_DEFAULT)
-                    data = "package:${PluginEntry.PACKAGE_NAME}".toUri()
-                }
-            )
+            Toast.makeText(this, R.string.settings_applied, Toast.LENGTH_SHORT).show()
         }
 
         findViewById<TextView>(R.id.tvHint).setOnClickListener {
