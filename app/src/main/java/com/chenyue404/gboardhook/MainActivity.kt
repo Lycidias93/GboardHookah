@@ -14,6 +14,11 @@ import androidx.core.net.toUri
 
 class MainActivity : Activity() {
 
+    companion object {
+        private const val SP_KEY_MANUAL_CAPACITY = "manual_clipboard_capacity"
+        private const val AUTO_CAPACITY = Int.MAX_VALUE
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -34,16 +39,37 @@ class MainActivity : Activity() {
             null
         }
 
-        pref?.getString(PluginEntry.SP_KEY, null)?.split(",")?.let { list ->
-            et0.text.append(list.getOrNull(0).orEmpty())
-            et1.text.append(list.getOrNull(1).orEmpty())
-            sw0.isChecked = list.getOrNull(2)?.equals("true", true) ?: false
+        val storedConfig = pref?.getString(PluginEntry.SP_KEY, null)?.split(",")
+        val storedCapacity = storedConfig?.getOrNull(0)?.toIntOrNull()
+        val fallbackManualCapacity = when (storedCapacity) {
+            null, AUTO_CAPACITY -> PluginEntry.DEFAULT_NUM
+            else -> storedCapacity.coerceAtLeast(1)
         }
+        val manualCapacity = pref?.getInt(
+            SP_KEY_MANUAL_CAPACITY,
+            fallbackManualCapacity
+        ) ?: fallbackManualCapacity
+
+        et0.setText(manualCapacity.toString())
+        et1.setText(storedConfig?.getOrNull(1).orEmpty())
+        sw0.isChecked = storedConfig
+            ?.getOrNull(2)
+            ?.equals("true", true) ?: false
         swLog.isChecked = pref?.getBoolean(PluginEntry.SP_KEY_LOG, false) ?: false
         swSyncAndroidClipboardCapacity.isChecked = pref?.getBoolean(
             PluginEntry.SP_KEY_SYNC_ANDROID_CLIPBOARD_CAPACITY,
             PluginEntry.DEFAULT_SYNC_ANDROID_CLIPBOARD_CAPACITY
         ) ?: PluginEntry.DEFAULT_SYNC_ANDROID_CLIPBOARD_CAPACITY
+
+        fun updateCapacityUi(syncEnabled: Boolean) {
+            et0.isEnabled = !syncEnabled
+            et0.alpha = if (syncEnabled) 0.45f else 1.0f
+        }
+
+        updateCapacityUi(swSyncAndroidClipboardCapacity.isChecked)
+        swSyncAndroidClipboardCapacity.setOnCheckedChangeListener { _, isChecked ->
+            updateCapacityUi(isChecked)
+        }
 
         bt0.setOnClickListener {
             if (pref == null) {
@@ -51,14 +77,20 @@ class MainActivity : Activity() {
                 return@setOnClickListener
             }
 
-            val num = et0.text.toString().toIntOrNull()?.coerceAtLeast(1)
+            val manualNum = et0.text.toString().toIntOrNull()?.coerceAtLeast(1)
                 ?: PluginEntry.DEFAULT_NUM
+            val effectiveNum = if (swSyncAndroidClipboardCapacity.isChecked) {
+                AUTO_CAPACITY
+            } else {
+                manualNum
+            }
             val time = et1.text.toString().toLongOrNull()?.coerceAtLeast(0L)
                 ?: PluginEntry.DEFAULT_TIME
             val switchOn = sw0.isChecked.toString()
 
             pref.edit().apply {
-                putString(PluginEntry.SP_KEY, "$num,$time,$switchOn")
+                putString(PluginEntry.SP_KEY, "$effectiveNum,$time,$switchOn")
+                putInt(SP_KEY_MANUAL_CAPACITY, manualNum)
                 putBoolean(PluginEntry.SP_KEY_LOG, swLog.isChecked)
                 putBoolean(
                     PluginEntry.SP_KEY_SYNC_ANDROID_CLIPBOARD_CAPACITY,
@@ -67,7 +99,12 @@ class MainActivity : Activity() {
                 apply()
             }
 
-            Toast.makeText(this, R.string.settings_applied, Toast.LENGTH_SHORT).show()
+            val message = if (swSyncAndroidClipboardCapacity.isChecked) {
+                R.string.settings_applied_auto_capacity
+            } else {
+                R.string.settings_applied
+            }
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
 
         findViewById<TextView>(R.id.tvHint).setOnClickListener {
