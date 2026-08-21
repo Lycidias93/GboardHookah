@@ -20,8 +20,8 @@ android {
         applicationId "com.lycidias93.gboardhookah"
         minSdk 23
         targetSdk 31
-        versionCode 15
-        versionName "1.4.4-hookah.5"
+        versionCode 16
+        versionName "1.4.5-hookah.6"
     }
 
     buildFeatures {
@@ -46,6 +46,10 @@ android {
     buildTypes {
         debug {
             minifyEnabled false
+            // CI distributes this variant for direct installation. Keep debug signing,
+            // but do not expose android:debuggable so Android's compatibility checker
+            // does not treat normal user installs as debuggable test apps.
+            debuggable false
         }
         release {
             minifyEnabled true

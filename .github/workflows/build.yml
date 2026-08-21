@@ -36,12 +36,20 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build debug APK
+      - name: Build install APK
         run: ./gradlew :app:assembleDebug --stacktrace
 
-      - name: Upload debug APK
+      - name: Verify 16 KB native-library ZIP alignment
+        run: |
+          APK="$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
+          ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -type f -name zipalign -print | sort -V | tail -n 1)"
+          test -n "$APK"
+          test -x "$ZIPALIGN"
+          "$ZIPALIGN" -c -P 16 -v 4 "$APK"
+
+      - name: Upload install APK
         uses: actions/upload-artifact@v4
         with:
-          name: GboardHookah-debug-apk
+          name: GboardHookah-install-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
