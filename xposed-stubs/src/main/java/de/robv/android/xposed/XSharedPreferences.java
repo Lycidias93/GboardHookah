@@ -15,4 +15,11 @@ public class XSharedPreferences {
     public boolean getBoolean(String key, boolean defValue) {
         return defValue;
     }
+
+    public int getInt(String key, int defValue) {
+        return defValue;
+    }
+
+    public void reload() {
+    }
 }
