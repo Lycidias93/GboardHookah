@@ -29,11 +29,14 @@ class PluginEntry : IXposedHookLoadPackage {
         const val SP_FILE_NAME = "GboardinHook"
         const val SP_KEY = "key"
         const val SP_KEY_LOG = "key_log"
+        const val SP_KEY_SYNC_ANDROID_CLIPBOARD_CAPACITY =
+            "sync_android_clipboard_capacity"
         const val TAG = "xposed-GboardHookah-"
         const val PACKAGE_NAME = "com.google.android.inputmethod.latin"
         const val DAY: Long = 1000 * 60 * 60 * 24
         const val DEFAULT_NUM = 10
         const val DEFAULT_TIME = DAY * 3
+        const val DEFAULT_SYNC_ANDROID_CLIPBOARD_CAPACITY = true
 
         private const val CLIPBOARD_PROVIDER =
             "com.google.android.apps.inputmethod.libs.clipboard.ClipboardContentProvider"
@@ -72,6 +75,13 @@ class PluginEntry : IXposedHookLoadPackage {
             ?: DEFAULT_TIME
     }
 
+    private val syncAndroidClipboardCapacity by lazy {
+        getPref()?.getBoolean(
+            SP_KEY_SYNC_ANDROID_CLIPBOARD_CAPACITY,
+            DEFAULT_SYNC_ANDROID_CLIPBOARD_CAPACITY
+        ) ?: DEFAULT_SYNC_ANDROID_CLIPBOARD_CAPACITY
+    }
+
     private val logSwitch by lazy {
         getPref()?.getBoolean(SP_KEY_LOG, false) ?: false
     }
@@ -95,12 +105,18 @@ class PluginEntry : IXposedHookLoadPackage {
             return
         }
 
-        log("handleLoadPackage: $packageName, capacity=$clipboardTextSize, retentionMs=$clipboardTextTime")
+        log(
+            "handleLoadPackage: $packageName, capacity=$clipboardTextSize, " +
+                "retentionMs=$clipboardTextTime, " +
+                "syncAndroidCapacity=$syncAndroidClipboardCapacity"
+        )
 
         hookGboardFlags(classLoader)
         hookClipboardProviderLegacy(classLoader)
-        hookClipboardProviderBundle(classLoader)
-        hookSQLiteClipboardQueries()
+        if (syncAndroidClipboardCapacity) {
+            hookClipboardProviderBundle(classLoader)
+            hookSQLiteClipboardQueries()
+        }
         hookHashSetCompatibility()
     }
 
@@ -130,7 +146,9 @@ class PluginEntry : IXposedHookLoadPackage {
                             }
                         }
 
-                        val readConfigMethod = if (cachedVersion == versionCode && cachedMethod != null) {
+                        val readConfigMethod = if (
+                            cachedVersion == versionCode && cachedMethod != null
+                        ) {
                             cachedMethod
                         } else {
                             findReadConfigMethod(dexBridge)?.also { method ->
@@ -172,7 +190,7 @@ class PluginEntry : IXposedHookLoadPackage {
                             rewriteSelectionArgs(selection, selectionArgs)?.let {
                                 param.args[3] = it
                             }
-                            rewriteLimitString(sortOrder)?.let {
+                            rewriteLegacyLimit(sortOrder)?.let {
                                 param.args[4] = it
                                 log("legacy limit rewritten: $it")
                             }
@@ -234,7 +252,10 @@ class PluginEntry : IXposedHookLoadPackage {
                             }
 
                             rewriteLimitString(sortOrder)?.let {
-                                queryArgs.putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, it)
+                                queryArgs.putString(
+                                    ContentResolver.QUERY_ARG_SQL_SORT_ORDER,
+                                    it
+                                )
                                 log("bundle sort limit rewritten: $it")
                             }
 
@@ -304,7 +325,14 @@ class PluginEntry : IXposedHookLoadPackage {
                 CancellationSignal::class.java,
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
-                        rewriteSqliteQuery(param, 0, 2, 3, 7, "sqlite query cancel")
+                        rewriteSqliteQuery(
+                            param,
+                            0,
+                            2,
+                            3,
+                            7,
+                            "sqlite query cancel"
+                        )
                     }
                 }
             )
@@ -325,7 +353,14 @@ class PluginEntry : IXposedHookLoadPackage {
                 String::class.java,
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
-                        rewriteSqliteQuery(param, 1, 3, 4, 8, "sqlite query distinct")
+                        rewriteSqliteQuery(
+                            param,
+                            1,
+                            3,
+                            4,
+                            8,
+                            "sqlite query distinct"
+                        )
                     }
                 }
             )
@@ -421,7 +456,8 @@ class PluginEntry : IXposedHookLoadPackage {
                             val set = param.thisObject as HashSet<*>
                             val instantClassName = "j" + '$' + ".time.Instant"
                             if (set.firstOrNull()?.javaClass?.name == instantClassName) {
-                                val map = XposedHelpers.getObjectField(set, "map") as? HashMap<*, *>
+                                val map = XposedHelpers
+                                    .getObjectField(set, "map") as? HashMap<*, *>
                                 if (map != null && map.size <= clipboardTextSize) {
                                     param.result = 5
                                 }
@@ -476,6 +512,20 @@ class PluginEntry : IXposedHookLoadPackage {
         ).format(Date(afterTimestamp))
         log("timestamp rewritten: $formatted")
         return updatedArgs
+    }
+
+    private fun rewriteLegacyLimit(value: String?): String? {
+        if (syncAndroidClipboardCapacity) {
+            return rewriteLimitString(value)
+        }
+        if (value.isNullOrBlank()) {
+            return null
+        }
+        return if (value.trim().equals("timestamp DESC limit 5", ignoreCase = true)) {
+            "timestamp DESC limit $clipboardTextSize"
+        } else {
+            null
+        }
     }
 
     private fun rewriteLimitString(value: String?): String? {
