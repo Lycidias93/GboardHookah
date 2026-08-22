@@ -26,40 +26,48 @@ object RuntimeStatus {
         lastError = ""
     }
 
-    fun hookReady(name: String) {
-        synchronized(hookStates) {
-            hookStates.remove("$name=error")
-            hookStates.add("$name=ready")
-        }
+    fun hookReady(name: String): Boolean = synchronized(hookStates) {
+        val changed = hookStates.remove("$name=error")
+        hookStates.add("$name=ready") || changed
     }
 
-    fun hookError(name: String, throwable: Throwable) {
-        synchronized(hookStates) {
-            hookStates.remove("$name=ready")
-            hookStates.add("$name=error")
+    fun hookError(name: String, throwable: Throwable): Boolean {
+        val stateChanged = synchronized(hookStates) {
+            val removed = hookStates.remove("$name=ready")
+            hookStates.add("$name=error") || removed
         }
         val detail = throwable.javaClass.simpleName +
             (throwable.message?.let { ": $it" } ?: "")
-        lastError = "$name: $detail"
+        val message = "$name: $detail"
+        val errorChanged = lastError != message
+        lastError = message
+        return stateChanged || errorChanged
     }
 
-    fun observe(path: String, provesCapacityHandling: Boolean = false) {
-        observedPaths.add(path)
+    fun observe(path: String, provesCapacityHandling: Boolean = false): Boolean {
+        val pathChanged = observedPaths.add(path)
+        val proofChanged = provesCapacityHandling && !capacityProof
         if (provesCapacityHandling) {
             capacityProof = true
         }
+        return pathChanged || proofChanged
     }
 
-    fun callbackError(path: String, throwable: Throwable) {
+    fun callbackError(path: String, throwable: Throwable): Boolean {
         val detail = throwable.javaClass.simpleName +
             (throwable.message?.let { ": $it" } ?: "")
-        lastError = "$path callback: $detail"
+        val message = "$path callback: $detail"
+        val changed = lastError != message
+        lastError = message
+        return changed
     }
 
-    fun clearTransientError(prefix: String) {
+    fun clearTransientError(prefix: String): Boolean {
         if (lastError.startsWith(prefix)) {
             lastError = ""
+            return true
         }
+        return false
     }
 
     fun hookSummary(): String = synchronized(hookStates) {
