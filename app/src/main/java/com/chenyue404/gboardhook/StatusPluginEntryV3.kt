@@ -1,9 +1,11 @@
 package com.chenyue404.gboardhook
 
 import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.Bundle
@@ -15,13 +17,14 @@ import de.robv.android.xposed.XSharedPreferences
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Runtime status v3.
  *
  * The Gboard process pushes an authenticated snapshot to a manifest-declared receiver
- * in GboardHookah. This deliberately avoids relying on Application/Instrumentation
- * lifecycle hooks, which are not reached reliably by current Gboard builds.
+ * in GboardHookah. Context acquisition uses AndroidAppHelper after process bootstrap,
+ * so status no longer depends on Application/Instrumentation lifecycle callbacks.
  */
 class StatusPluginEntryV3 : IXposedHookLoadPackage {
     companion object {
@@ -29,10 +32,12 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
         private const val TELEMETRY_PRIORITY = 10000
         private const val CONTEXT_RETRY_COUNT = 50
         private const val CONTEXT_RETRY_SLEEP_MS = 100L
+        private const val RECEIVER_EXPORTED_FLAG = 0x2
         private val LIMIT_REGEX = Regex(
             "\\blimit\\s+\\d+(?:\\s*,\\s*\\d+)?\\b",
             RegexOption.IGNORE_CASE
         )
+        private val requestReceiverRegistered = AtomicBoolean(false)
 
         @Volatile
         private var runtimeProcessName = ""
@@ -47,16 +52,18 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
         installBundleWatcher(lpparam.classLoader)
         installSqliteWatchers()
         installHashSetWatcher()
-        scheduleInitialPush()
+        scheduleContextBootstrap()
         log("status v3 entry loaded process=$runtimeProcessName")
     }
 
-    private fun scheduleInitialPush() {
+    private fun scheduleContextBootstrap() {
         Thread({
             repeat(CONTEXT_RETRY_COUNT) {
                 val app = currentApplication()
                 if (app != null) {
-                    pushStatus(app.applicationContext, "process-start")
+                    val context = app.applicationContext
+                    registerRequestReceiver(context)
+                    pushStatus(context, "process-start")
                     return@Thread
                 }
                 try {
@@ -66,7 +73,7 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
                     return@Thread
                 }
             }
-            log("status push context timeout")
+            log("status context bootstrap timeout")
         }, "GboardHookahStatusInit").apply {
             isDaemon = true
             start()
@@ -78,6 +85,43 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
     } catch (t: Throwable) {
         log("currentApplication failed: $t")
         null
+    }
+
+    private fun registerRequestReceiver(context: Context) {
+        if (!requestReceiverRegistered.compareAndSet(false, true)) return
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context, intent: Intent) {
+                if (intent.action != StatusProtocol.ACTION_REQUEST) return
+                val suppliedToken = intent.getStringExtra(StatusProtocol.EXTRA_TOKEN) ?: return
+                val expectedToken = readPreferences()
+                    .getString(StatusProtocol.PREF_TOKEN, null) ?: return
+                if (suppliedToken != expectedToken) return
+                pushStatus(receiverContext.applicationContext, "refresh-request")
+            }
+        }
+
+        try {
+            val filter = IntentFilter(StatusProtocol.ACTION_REQUEST)
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                val method = Context::class.java.getMethod(
+                    "registerReceiver",
+                    BroadcastReceiver::class.java,
+                    IntentFilter::class.java,
+                    Integer.TYPE
+                )
+                method.invoke(context, receiver, filter, RECEIVER_EXPORTED_FLAG)
+            } else {
+                @Suppress("DEPRECATION")
+                context.registerReceiver(receiver, filter)
+            }
+            RuntimeStatus.hookReady("status-channel")
+            log("status channel ready source=AndroidAppHelper")
+        } catch (t: Throwable) {
+            requestReceiverRegistered.set(false)
+            RuntimeStatus.hookError("status-channel", t)
+            log("status channel registration failed: $t")
+        }
     }
 
     private fun pushCurrentStatus(reason: String) {
