@@ -94,7 +94,7 @@ class PluginEntry : IXposedHookLoadPackage {
 
     private fun log(str: String) {
         if (logSwitch) {
-            XposedBridge.log(TAG + "\n" + str)
+            XposedBridge.log("$TAG $str")
         }
     }
 
@@ -127,51 +127,55 @@ class PluginEntry : IXposedHookLoadPackage {
     }
 
     private fun hookGboardFlags(classLoader: ClassLoader) {
-        findAndHookMethod(
-            Application::class.java,
-            "attach",
-            Context::class.java,
-            object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
-                    try {
-                        val dexBridge by lazy { DexKitBridge.create(classLoader, true) }
-                        val context = param.args.first() as Context
-                        val sp = context.getSharedPreferences("gboard_hook", Context.MODE_PRIVATE)
-                        val spKeyMethodReadConfig = "SP_KEY_METHOD_READ_CONFIG"
-                        val spKeyVersion = "SP_KEY_VERSION"
-                        val versionCode = context.packageManager
-                            .getPackageInfo(context.packageName, 0)
-                            .versionCode
-                        val cachedVersion = sp.getInt(spKeyVersion, -1)
-                        val cachedMethod = sp.getString(spKeyMethodReadConfig, null)?.let {
-                            try {
-                                DexMethod(it)
-                            } catch (e: Exception) {
-                                log("invalid cached ReadConfig method: $it")
-                                null
-                            }
-                        }
-
-                        val readConfigMethod = if (
-                            cachedVersion == versionCode && cachedMethod != null
-                        ) {
-                            cachedMethod
-                        } else {
-                            findReadConfigMethod(dexBridge)?.also { method ->
-                                sp.edit {
-                                    putInt(spKeyVersion, versionCode)
-                                    putString(spKeyMethodReadConfig, method.serialize())
+        tryHook("Application#attach-flags") {
+            findAndHookMethod(
+                Application::class.java,
+                "attach",
+                Context::class.java,
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        val context = param.args.firstOrNull() as? Context ?: return
+                        StatusPluginEntryV3.captureRuntimeContext(context, "primary-application-attach")
+                        try {
+                            val dexBridge by lazy { DexKitBridge.create(classLoader, true) }
+                            val sp = context.getSharedPreferences("gboard_hook", Context.MODE_PRIVATE)
+                            val spKeyMethodReadConfig = "SP_KEY_METHOD_READ_CONFIG"
+                            val spKeyVersion = "SP_KEY_VERSION"
+                            val versionCode = context.packageManager
+                                .getPackageInfo(context.packageName, 0)
+                                .versionCode
+                            val cachedVersion = sp.getInt(spKeyVersion, -1)
+                            val cachedMethod = sp.getString(spKeyMethodReadConfig, null)?.let {
+                                try {
+                                    DexMethod(it)
+                                } catch (e: Exception) {
+                                    log("invalid cached ReadConfig method: $it")
+                                    null
                                 }
                             }
-                        }
 
-                        readConfigMethod?.let { hookReadConfig(it, classLoader) }
-                    } catch (t: Throwable) {
-                        log("flag hook setup failed: $t")
+                            val readConfigMethod = if (
+                                cachedVersion == versionCode && cachedMethod != null
+                            ) {
+                                cachedMethod
+                            } else {
+                                findReadConfigMethod(dexBridge)?.also { method ->
+                                    sp.edit {
+                                        putInt(spKeyVersion, versionCode)
+                                        putString(spKeyMethodReadConfig, method.serialize())
+                                    }
+                                }
+                            }
+
+                            readConfigMethod?.let { hookReadConfig(it, classLoader) }
+                        } catch (t: Throwable) {
+                            StatusPluginEntryV3.reportHookError("gboard-flags", t)
+                            log("flag hook setup failed: $t")
+                        }
                     }
                 }
-            }
-        )
+            )
+        }
     }
 
     private fun hookClipboardProviderLegacy(classLoader: ClassLoader) {
@@ -187,6 +191,7 @@ class PluginEntry : IXposedHookLoadPackage {
                 String::class.java,
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
+                        var capacityHandled = false
                         try {
                             val selection = param.args[2]?.toString().orEmpty()
                             val selectionArgs = param.args[3] as? Array<String>
@@ -198,10 +203,18 @@ class PluginEntry : IXposedHookLoadPackage {
                             }
                             rewriteLegacyLimit(sortOrder)?.let {
                                 param.args[4] = it
+                                capacityHandled = true
                                 log("legacy limit rewritten: $it")
                             }
                         } catch (t: Throwable) {
+                            StatusPluginEntryV3.reportHookError("provider-legacy", t)
                             log("legacy query callback failed: $t")
+                        } finally {
+                            StatusPluginEntryV3.reportHookEvent(
+                                param.thisObject,
+                                "provider-legacy",
+                                capacityHandled
+                            )
                         }
                     }
 
@@ -225,6 +238,7 @@ class PluginEntry : IXposedHookLoadPackage {
                 CancellationSignal::class.java,
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
+                        var capacityHandled = false
                         try {
                             val originalArgs = param.args[2] as? Bundle ?: return
                             val queryArgs = Bundle(originalArgs)
@@ -262,6 +276,7 @@ class PluginEntry : IXposedHookLoadPackage {
                                     ContentResolver.QUERY_ARG_SQL_SORT_ORDER,
                                     it
                                 )
+                                capacityHandled = true
                                 log("bundle sort limit rewritten: $it")
                             }
 
@@ -270,6 +285,7 @@ class PluginEntry : IXposedHookLoadPackage {
                                     ContentResolver.QUERY_ARG_SQL_LIMIT,
                                     clipboardTextSize.toString()
                                 )
+                                capacityHandled = true
                                 log("bundle SQL limit forced to $clipboardTextSize")
                             }
 
@@ -278,12 +294,20 @@ class PluginEntry : IXposedHookLoadPackage {
                                     ContentResolver.QUERY_ARG_LIMIT,
                                     clipboardTextSize
                                 )
+                                capacityHandled = true
                                 log("bundle structured limit forced to $clipboardTextSize")
                             }
 
                             param.args[2] = queryArgs
                         } catch (t: Throwable) {
+                            StatusPluginEntryV3.reportHookError("provider-bundle", t)
                             log("bundle query callback failed: $t")
+                        } finally {
+                            StatusPluginEntryV3.reportHookEvent(
+                                param.thisObject,
+                                "provider-bundle",
+                                capacityHandled
+                            )
                         }
                     }
 
@@ -310,7 +334,15 @@ class PluginEntry : IXposedHookLoadPackage {
                 String::class.java,
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
-                        rewriteSqliteQuery(param, 0, 2, 3, 7, "sqlite query")
+                        rewriteSqliteQuery(
+                            param,
+                            0,
+                            2,
+                            3,
+                            7,
+                            "sqlite-query",
+                            "sqlite query"
+                        )
                     }
                 }
             )
@@ -337,6 +369,7 @@ class PluginEntry : IXposedHookLoadPackage {
                             2,
                             3,
                             7,
+                            "sqlite-query-cancel",
                             "sqlite query cancel"
                         )
                     }
@@ -365,6 +398,7 @@ class PluginEntry : IXposedHookLoadPackage {
                             3,
                             4,
                             8,
+                            "sqlite-query-distinct",
                             "sqlite query distinct"
                         )
                     }
@@ -380,7 +414,7 @@ class PluginEntry : IXposedHookLoadPackage {
                 Array<String>::class.java,
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
-                        rewriteRawSql(param, 0, "rawQuery")
+                        rewriteRawSql(param, 0, "sqlite-rawQuery", "rawQuery")
                     }
                 }
             )
@@ -395,7 +429,12 @@ class PluginEntry : IXposedHookLoadPackage {
                 CancellationSignal::class.java,
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
-                        rewriteRawSql(param, 0, "rawQuery cancel")
+                        rewriteRawSql(
+                            param,
+                            0,
+                            "sqlite-rawQuery-cancel",
+                            "rawQuery cancel"
+                        )
                     }
                 }
             )
@@ -408,6 +447,7 @@ class PluginEntry : IXposedHookLoadPackage {
         selectionIndex: Int,
         selectionArgsIndex: Int,
         limitIndex: Int,
+        path: String,
         label: String
     ) {
         try {
@@ -426,8 +466,10 @@ class PluginEntry : IXposedHookLoadPackage {
             }
 
             param.args[limitIndex] = clipboardTextSize.toString()
+            StatusPluginEntryV3.reportHookEvent(param.thisObject, path, true)
             log("$label limit forced to $clipboardTextSize")
         } catch (t: Throwable) {
+            StatusPluginEntryV3.reportHookError(path, t)
             log("$label callback failed: $t")
         }
     }
@@ -435,6 +477,7 @@ class PluginEntry : IXposedHookLoadPackage {
     private fun rewriteRawSql(
         param: XC_MethodHook.MethodHookParam,
         sqlIndex: Int,
+        path: String,
         label: String
     ) {
         try {
@@ -442,11 +485,16 @@ class PluginEntry : IXposedHookLoadPackage {
             if (!CLIPBOARD_SQL_REGEX.containsMatchIn(sql)) {
                 return
             }
-            rewriteLimitString(sql)?.let {
-                param.args[sqlIndex] = it
+            val rewritten = rewriteLimitString(sql)
+            if (rewritten != null) {
+                param.args[sqlIndex] = rewritten
+                StatusPluginEntryV3.reportHookEvent(param.thisObject, path, true)
                 log("$label clipboard limit rewritten")
+            } else {
+                StatusPluginEntryV3.reportHookEvent(param.thisObject, path, false)
             }
         } catch (t: Throwable) {
+            StatusPluginEntryV3.reportHookError(path, t)
             log("$label callback failed: $t")
         }
     }
@@ -466,9 +514,21 @@ class PluginEntry : IXposedHookLoadPackage {
                                     .getObjectField(set, "map") as? HashMap<*, *>
                                 if (map != null && map.size <= clipboardTextSize) {
                                     param.result = 5
+                                    StatusPluginEntryV3.reportHookEvent(
+                                        null,
+                                        "hashset-compat",
+                                        true
+                                    )
+                                } else {
+                                    StatusPluginEntryV3.reportHookEvent(
+                                        null,
+                                        "hashset-compat",
+                                        false
+                                    )
                                 }
                             }
                         } catch (t: Throwable) {
+                            StatusPluginEntryV3.reportHookError("hashset-compat", t)
                             log("HashSet compatibility callback failed: $t")
                         }
                     }
@@ -546,6 +606,7 @@ class PluginEntry : IXposedHookLoadPackage {
             val cursor = result as? Cursor ?: return
             log("$prefix end, count=${cursor.count}")
         } catch (t: Throwable) {
+            StatusPluginEntryV3.reportHookError(prefix, t)
             log("$prefix count failed: $t")
         }
     }
@@ -553,11 +614,19 @@ class PluginEntry : IXposedHookLoadPackage {
     private fun tryHook(logStr: String, unit: (name: String) -> Unit) {
         try {
             unit(logStr)
+            RuntimeStatus.hookReady(logStr)
+            StatusPluginEntryV3.notifyRuntimeChanged("hook-ready-$logStr")
         } catch (e: NoSuchMethodError) {
+            RuntimeStatus.hookError(logStr, e)
+            StatusPluginEntryV3.notifyRuntimeChanged("hook-error-$logStr")
             log("NoSuchMethodError--$logStr")
         } catch (e: ClassNotFoundError) {
+            RuntimeStatus.hookError(logStr, e)
+            StatusPluginEntryV3.notifyRuntimeChanged("hook-error-$logStr")
             log("ClassNotFoundError--$logStr")
         } catch (t: Throwable) {
+            RuntimeStatus.hookError(logStr, t)
+            StatusPluginEntryV3.notifyRuntimeChanged("hook-error-$logStr")
             log("HookError--$logStr -- $t")
         }
     }
@@ -602,6 +671,7 @@ class PluginEntry : IXposedHookLoadPackage {
                                 log("flag forced false: $name")
                             }
                         } catch (t: Throwable) {
+                            StatusPluginEntryV3.reportHookError("read-config", t)
                             log("ReadConfig callback failed: $t")
                         }
                     }
