@@ -81,7 +81,7 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
     }
 
     private fun currentApplication(): Application? = try {
-        AndroidAppHelper.currentApplication()
+        AndroidAppHelper.currentApplication() as? Application
     } catch (t: Throwable) {
         log("currentApplication failed: $t")
         null
