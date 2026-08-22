@@ -3,8 +3,10 @@ package com.chenyue404.gboardhook
 object StatusProtocol {
     const val ACTION_REQUEST = "com.lycidias93.gboardhookah.STATUS_REQUEST"
     const val ACTION_RESPONSE = "com.lycidias93.gboardhookah.STATUS_RESPONSE"
+    const val ACTION_PUSH = "com.lycidias93.gboardhookah.STATUS_PUSH"
 
     const val PREF_TOKEN = "status_channel_token"
+    const val PREF_SNAPSHOT_PRESENT = "runtime_status_snapshot_present"
 
     const val EXTRA_TOKEN = "token"
     const val EXTRA_MODULE_VERSION = "module_version"
