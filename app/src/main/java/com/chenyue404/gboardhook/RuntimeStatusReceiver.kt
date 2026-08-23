@@ -17,7 +17,7 @@ class RuntimeStatusReceiver : BroadcastReceiver() {
             return
         }
 
-        val pref = context.getSharedPreferences(PluginEntry.SP_FILE_NAME, Context.MODE_PRIVATE)
+        val pref = openModulePreferences(context) ?: return
         val suppliedToken = intent.getStringExtra(StatusProtocol.EXTRA_TOKEN) ?: return
         val expectedToken = pref.getString(StatusProtocol.PREF_TOKEN, null) ?: return
         if (suppliedToken != expectedToken) {
@@ -33,6 +33,25 @@ class RuntimeStatusReceiver : BroadcastReceiver() {
                 if (pref.getBoolean(StatusProtocol.PREF_SNAPSHOT_PRESENT, false)) {
                     sendSnapshot(context, pref, suppliedToken)
                 }
+            }
+        }
+    }
+
+    private fun openModulePreferences(context: Context): SharedPreferences? {
+        return try {
+            @Suppress("DEPRECATION")
+            context.getSharedPreferences(
+                PluginEntry.SP_FILE_NAME,
+                Context.MODE_WORLD_READABLE
+            )
+        } catch (_: SecurityException) {
+            // Fallback is mainly useful on non-LSPosed launches. On LSPosed the
+            // xposedsharedprefs redirect makes MODE_WORLD_READABLE resolve to the
+            // module preference service used by XSharedPreferences in Gboard.
+            try {
+                context.getSharedPreferences(PluginEntry.SP_FILE_NAME, Context.MODE_PRIVATE)
+            } catch (_: Throwable) {
+                null
             }
         }
     }

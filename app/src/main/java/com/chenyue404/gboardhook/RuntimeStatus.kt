@@ -1,5 +1,6 @@
 package com.chenyue404.gboardhook
 
+import de.robv.android.xposed.XposedHelpers
 import java.util.Collections
 
 /**
@@ -27,14 +28,24 @@ object RuntimeStatus {
     }
 
     fun hookReady(name: String): Boolean = synchronized(hookStates) {
-        val changed = hookStates.remove("$name=error")
+        val changed = hookStates.remove("$name=error") || hookStates.remove("$name=unsupported")
         hookStates.add("$name=ready") || changed
     }
 
+    fun hookUnsupported(name: String): Boolean = synchronized(hookStates) {
+        val changed = hookStates.remove("$name=ready") || hookStates.remove("$name=error")
+        hookStates.add("$name=unsupported") || changed
+    }
+
     fun hookError(name: String, throwable: Throwable): Boolean {
+        if (throwable is NoSuchMethodError || throwable is XposedHelpers.ClassNotFoundError) {
+            return hookUnsupported(name)
+        }
+
         val stateChanged = synchronized(hookStates) {
-            val removed = hookStates.remove("$name=ready")
-            hookStates.add("$name=error") || removed
+            val removedReady = hookStates.remove("$name=ready")
+            val removedUnsupported = hookStates.remove("$name=unsupported")
+            hookStates.add("$name=error") || removedReady || removedUnsupported
         }
         val detail = throwable.javaClass.simpleName +
             (throwable.message?.let { ": $it" } ?: "")
