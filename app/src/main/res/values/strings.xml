@@ -1,9 +1,11 @@
 <resources>
     <string name="ignore_package_limit">Ignore package limit (enable only for renamed Gboard packages)</string>
     <string name="log_switch">Enable extra debug logging</string>
-    <string name="clipboard_capacity">Clipboard capacity, default 10</string>
-    <string name="sync_android_clipboard_capacity">Sync Android clipboard capacity</string>
-    <string name="clipboard_expire_time">Clipboard expiration time, default 3 days, milliseconds</string>
+    <string name="clipboard_capacity_label">Manual Gboard clipboard capacity (used only when history sync is OFF)</string>
+    <string name="clipboard_capacity">Default: 10</string>
+    <string name="sync_android_clipboard_capacity">Follow Android clipboard history capacity (no custom GboardHookah limit)</string>
+    <string name="clipboard_expire_time_label">Clipboard retention time (milliseconds)</string>
+    <string name="clipboard_expire_time">Default: 259200000 (3 days)</string>
     <string name="apply">Apply</string>
     <string name="settings_applied">Settings applied. Restart Gboard for changes to take effect.</string>
     <string name="settings_applied_auto_capacity">Settings applied. Capacity follows Android clipboard history. Restart Gboard.</string>
