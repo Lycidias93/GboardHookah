@@ -1,5 +1,6 @@
 package com.chenyue404.gboardhook
 
+import de.robv.android.xposed.XposedHelpers
 import java.util.Collections
 
 /**
@@ -37,7 +38,7 @@ object RuntimeStatus {
     }
 
     fun hookError(name: String, throwable: Throwable): Boolean {
-        if (throwable is NoSuchMethodError || throwable is ClassNotFoundError) {
+        if (throwable is NoSuchMethodError || throwable is XposedHelpers.ClassNotFoundError) {
             return hookUnsupported(name)
         }
 
