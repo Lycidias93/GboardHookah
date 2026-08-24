@@ -20,8 +20,8 @@ android {
         applicationId "com.lycidias93.gboardhookah"
         minSdk 23
         targetSdk 31
-        versionCode 22
-        versionName "1.4.11-hookah.12"
+        versionCode 23
+        versionName "1.4.12-hookah.13"
     }
 
     buildFeatures {

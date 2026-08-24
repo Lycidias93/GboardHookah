@@ -12,10 +12,19 @@
     <string name="config_read_failed">Failed to read configuration</string>
     <string name="runtime_status_title">Runtime status</string>
     <string name="refresh_status">Refresh status</string>
+    <string name="restart_gboard">Restart Gboard</string>
     <string name="status_not_checked">Not checked yet</string>
     <string name="status_checking">Checking live Gboard hook…</string>
-    <string name="status_no_live_response">No live response — restart Gboard and check LSPosed scope</string>
+    <string name="status_no_live_response">No live response — restart Gboard and check LSPosed scope or app-hiding rules</string>
     <string name="status_config_unavailable">Configuration unavailable</string>
     <string name="status_restart_required">Settings changed — restart Gboard before status can be verified</string>
-    <string name="restart_hint">Restart Gboard after applying. First-time setup may require a phone reboot. GboardHookah: https://github.com/Lycidias93/GboardHookah</string>
+    <string name="status_restarting_gboard">Restarting Gboard with root…</string>
+    <string name="status_restart_completed">Gboard restart completed — checking hook status…</string>
+    <string name="status_restart_failed">Gboard restart failed</string>
+    <string name="restart_gboard_success">Gboard restarted</string>
+    <string name="restart_gboard_stopped">Gboard stopped; it will start fresh on next keyboard use</string>
+    <string name="restart_gboard_not_running">Gboard was already stopped</string>
+    <string name="restart_gboard_failed">Could not restart Gboard safely</string>
+    <string name="restart_gboard_root_failed">Root access was unavailable or denied</string>
+    <string name="restart_hint">Use Restart Gboard after applying. The button only restarts the Gboard process; it does not change LSPosed scope or your default keyboard. First-time setup may still require a phone reboot. GboardHookah: https://github.com/Lycidias93/GboardHookah</string>
 </resources>
