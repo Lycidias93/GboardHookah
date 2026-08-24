@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.Settings
 import android.util.Log
 import android.widget.Button
 import android.widget.EditText
@@ -25,14 +26,22 @@ class MainActivity : Activity() {
     companion object {
         private const val SP_KEY_MANUAL_CAPACITY = "manual_clipboard_capacity"
         private const val RECEIVER_EXPORTED_FLAG = 0x2
-        private const val STATUS_TIMEOUT_MS = 2000L
+        private const val STATUS_TIMEOUT_MS = 2500L
+        private const val STATUS_AFTER_RESTART_DELAY_MS = 1800L
     }
+
+    private data class RootCommandResult(
+        val exitCode: Int,
+        val stdout: String,
+        val stderr: String
+    )
 
     private var modulePreferences: SharedPreferences? = null
     private var statusToken: String? = null
     private var statusReceiverRegistered = false
     private var pendingStatusRequest = 0L
     private lateinit var tvStatus: TextView
+    private lateinit var btRestartGboard: Button
     private val handler = Handler(Looper.getMainLooper())
 
     private val statusReceiver = object : BroadcastReceiver() {
@@ -45,7 +54,22 @@ class MainActivity : Activity() {
                 return
             }
             pendingStatusRequest = 0L
-            renderLiveStatus(intent)
+            renderLiveStatus(intent.extras ?: Bundle())
+        }
+    }
+
+    private val orderedStatusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val expectedToken = statusToken ?: return
+            val extras = getResultExtras(false) ?: return
+            if (extras.getString(StatusProtocol.EXTRA_TOKEN) != expectedToken) {
+                return
+            }
+            if (extras.getString(StatusProtocol.EXTRA_MODULE_VERSION).isNullOrBlank()) {
+                return
+            }
+            pendingStatusRequest = 0L
+            renderLiveStatus(extras)
         }
     }
 
@@ -61,6 +85,7 @@ class MainActivity : Activity() {
         val et1 = findViewById<EditText>(R.id.et1)
         val bt0 = findViewById<Button>(R.id.bt0)
         val btStatus = findViewById<Button>(R.id.btStatus)
+        btRestartGboard = findViewById(R.id.btRestartGboard)
         tvStatus = findViewById(R.id.tvStatus)
 
         modulePreferences = try {
@@ -140,6 +165,10 @@ class MainActivity : Activity() {
 
         btStatus.setOnClickListener {
             requestLiveStatus()
+        }
+
+        btRestartGboard.setOnClickListener {
+            restartGboard()
         }
 
         findViewById<TextView>(R.id.tvHint).setOnClickListener {
@@ -226,7 +255,21 @@ class MainActivity : Activity() {
         val request = Intent(StatusProtocol.ACTION_REQUEST)
             .setPackage(PluginEntry.PACKAGE_NAME)
             .putExtra(StatusProtocol.EXTRA_TOKEN, token)
-        sendBroadcast(request)
+
+        try {
+            sendOrderedBroadcast(
+                request,
+                null,
+                orderedStatusReceiver,
+                handler,
+                RESULT_CANCELED,
+                null,
+                null
+            )
+        } catch (t: Throwable) {
+            Log.d("MainActivity", "ordered status request failed: $t")
+            sendBroadcast(request)
+        }
 
         handler.postDelayed({
             if (pendingStatusRequest == requestId) {
@@ -236,42 +279,135 @@ class MainActivity : Activity() {
         }, STATUS_TIMEOUT_MS)
     }
 
-    private fun renderLiveStatus(intent: Intent) {
-        val moduleVersion = intent.getStringExtra(StatusProtocol.EXTRA_MODULE_VERSION)
-            .orEmpty()
-        val gboardVersion = intent.getStringExtra(StatusProtocol.EXTRA_GBOARD_VERSION_NAME)
-            .orEmpty()
-        val gboardVersionCode = intent.getLongExtra(
+    private fun restartGboard() {
+        if (!btRestartGboard.isEnabled) {
+            return
+        }
+        btRestartGboard.isEnabled = false
+        renderWaitingStatus(getString(R.string.status_restarting_gboard))
+
+        Thread {
+            val defaultImeBefore = Settings.Secure.getString(
+                contentResolver,
+                Settings.Secure.DEFAULT_INPUT_METHOD
+            ).orEmpty()
+            val pidBeforeResult = runRootCommand("pidof ${PluginEntry.PACKAGE_NAME}")
+            if (pidBeforeResult.exitCode != 0 && pidBeforeResult.stdout.isBlank()) {
+                runOnUiThread {
+                    btRestartGboard.isEnabled = true
+                    Toast.makeText(
+                        this,
+                        R.string.restart_gboard_root_failed,
+                        Toast.LENGTH_LONG
+                    ).show()
+                    renderWaitingStatus(getString(R.string.status_restart_failed))
+                }
+                return@Thread
+            }
+
+            val pidBefore = pidBeforeResult.stdout
+                .trim()
+                .split(Regex("\\s+"))
+                .firstOrNull { it.all(Char::isDigit) }
+
+            val outcome = if (pidBefore == null) {
+                "not_running"
+            } else {
+                val killResult = runRootCommand("kill -TERM $pidBefore")
+                if (killResult.exitCode != 0) {
+                    "kill_failed"
+                } else {
+                    Thread.sleep(1200L)
+                    val pidAfter = runRootCommand("pidof ${PluginEntry.PACKAGE_NAME}")
+                        .stdout
+                        .trim()
+                        .split(Regex("\\s+"))
+                        .firstOrNull { it.all(Char::isDigit) }
+                    when {
+                        pidAfter.isNullOrBlank() -> "stopped_pending_next_use"
+                        pidAfter == pidBefore -> "stale_pid"
+                        else -> "restarted_new_pid"
+                    }
+                }
+            }
+
+            val defaultImeAfter = Settings.Secure.getString(
+                contentResolver,
+                Settings.Secure.DEFAULT_INPUT_METHOD
+            ).orEmpty()
+            val success = outcome != "kill_failed" &&
+                outcome != "stale_pid" &&
+                defaultImeAfter == defaultImeBefore
+
+            runOnUiThread {
+                btRestartGboard.isEnabled = true
+                if (success) {
+                    Toast.makeText(
+                        this,
+                        when (outcome) {
+                            "stopped_pending_next_use" -> R.string.restart_gboard_stopped
+                            "not_running" -> R.string.restart_gboard_not_running
+                            else -> R.string.restart_gboard_success
+                        },
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    renderWaitingStatus(getString(R.string.status_restart_completed))
+                    handler.postDelayed({ requestLiveStatus() }, STATUS_AFTER_RESTART_DELAY_MS)
+                } else {
+                    Toast.makeText(
+                        this,
+                        R.string.restart_gboard_failed,
+                        Toast.LENGTH_LONG
+                    ).show()
+                    renderWaitingStatus(getString(R.string.status_restart_failed))
+                }
+            }
+        }.start()
+    }
+
+    private fun runRootCommand(command: String): RootCommandResult {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            val stdout = process.inputStream.bufferedReader().use { it.readText() }.trim()
+            val stderr = process.errorStream.bufferedReader().use { it.readText() }.trim()
+            RootCommandResult(process.waitFor(), stdout, stderr)
+        } catch (t: Throwable) {
+            RootCommandResult(-1, "", t.javaClass.simpleName)
+        }
+    }
+
+    private fun renderLiveStatus(status: Bundle) {
+        val moduleVersion = status.getString(StatusProtocol.EXTRA_MODULE_VERSION).orEmpty()
+        val gboardVersion = status.getString(StatusProtocol.EXTRA_GBOARD_VERSION_NAME).orEmpty()
+        val gboardVersionCode = status.getLong(
             StatusProtocol.EXTRA_GBOARD_VERSION_CODE,
             -1L
         )
-        val processName = intent.getStringExtra(StatusProtocol.EXTRA_PROCESS_NAME)
-            .orEmpty()
-        val syncEnabled = intent.getBooleanExtra(StatusProtocol.EXTRA_SYNC_ENABLED, false)
-        val configuredCapacity = intent.getIntExtra(
+        val processName = status.getString(StatusProtocol.EXTRA_PROCESS_NAME).orEmpty()
+        val syncEnabled = status.getBoolean(StatusProtocol.EXTRA_SYNC_ENABLED, false)
+        val configuredCapacity = status.getInt(
             StatusProtocol.EXTRA_CONFIGURED_CAPACITY,
             PluginEntry.DEFAULT_NUM
         )
-        val effectiveCapacity = intent.getIntExtra(
+        val effectiveCapacity = status.getInt(
             StatusProtocol.EXTRA_EFFECTIVE_CAPACITY,
             configuredCapacity
         )
-        val retentionMs = intent.getLongExtra(
+        val retentionMs = status.getLong(
             StatusProtocol.EXTRA_RETENTION_MS,
             PluginEntry.DEFAULT_TIME
         )
-        val debugLogging = intent.getBooleanExtra(
+        val debugLogging = status.getBoolean(
             StatusProtocol.EXTRA_DEBUG_LOGGING,
             false
         )
-        val watchers = intent.getStringExtra(StatusProtocol.EXTRA_WATCHERS).orEmpty()
-        val observedPaths = intent.getStringExtra(StatusProtocol.EXTRA_OBSERVED_PATHS)
-            .orEmpty()
-        val rewriteProof = intent.getBooleanExtra(
+        val watchers = status.getString(StatusProtocol.EXTRA_WATCHERS).orEmpty()
+        val observedPaths = status.getString(StatusProtocol.EXTRA_OBSERVED_PATHS).orEmpty()
+        val rewriteProof = status.getBoolean(
             StatusProtocol.EXTRA_REWRITE_PROOF,
             false
         )
-        val lastError = intent.getStringExtra(StatusProtocol.EXTRA_LAST_ERROR).orEmpty()
+        val lastError = status.getString(StatusProtocol.EXTRA_LAST_ERROR).orEmpty()
 
         val overall = when {
             lastError.isNotBlank() -> "DEGRADED"
@@ -315,7 +451,7 @@ class MainActivity : Activity() {
             appendLine("Status: $detail")
             appendLine("Module: ${BuildConfig.VERSION_NAME}")
             appendLine("Gboard: $localGboard")
-            append("Live hook proof: waiting for Gboard process")
+            append("Live hook proof: waiting for authenticated Gboard response")
         }
     }
 
