@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ProviderInfo
+import android.os.Bundle
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XSharedPreferences
@@ -86,6 +87,20 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
                     val expectedToken = readPreferences()
                         .getString(StatusProtocol.PREF_TOKEN, null) ?: return
                     if (suppliedToken != expectedToken) return
+
+                    if (isOrderedBroadcast) {
+                        try {
+                            setResultExtras(buildStatusBundle(receiverContext, suppliedToken))
+                            logStatic("ordered status response returned in request channel")
+                        } catch (t: Throwable) {
+                            RuntimeStatus.callbackError("status-ordered-response", t)
+                            logStatic("ordered status response failed: $t")
+                        }
+                    }
+
+                    // Keep the explicit push channel as a compatibility fallback. The ordered
+                    // result above is the primary refresh path because it does not require
+                    // Gboard to resolve the module package, which can be filtered by HMA.
                     pushStatus(receiverContext.applicationContext, "refresh-request")
                 }
             }
@@ -113,6 +128,54 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
             }
         }
 
+        private fun buildStatusBundle(context: Context, token: String): Bundle {
+            val pref = readPreferences()
+            val config = pref.getString(PluginEntry.SP_KEY, null)?.split(",")
+            val storedCapacity = config?.getOrNull(0)?.toIntOrNull()
+                ?.coerceAtLeast(1) ?: PluginEntry.DEFAULT_NUM
+            val manualCapacity = pref.getInt("manual_clipboard_capacity", storedCapacity)
+                .coerceAtLeast(1)
+            val syncEnabled = pref.getBoolean(
+                PluginEntry.SP_KEY_SYNC_ANDROID_CLIPBOARD_CAPACITY,
+                PluginEntry.DEFAULT_SYNC_ANDROID_CLIPBOARD_CAPACITY
+            )
+            val effectiveCapacity = if (syncEnabled) {
+                PluginEntry.AUTO_CAPACITY
+            } else {
+                manualCapacity
+            }
+            val retentionMs = config?.getOrNull(1)?.toLongOrNull()
+                ?.coerceAtLeast(0L) ?: PluginEntry.DEFAULT_TIME
+            val debugLogging = pref.getBoolean(PluginEntry.SP_KEY_LOG, false)
+            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            val gboardVersionCode = if (android.os.Build.VERSION.SDK_INT >= 28) {
+                packageInfo.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                packageInfo.versionCode.toLong()
+            }
+
+            return Bundle().apply {
+                putString(StatusProtocol.EXTRA_TOKEN, token)
+                putString(StatusProtocol.EXTRA_MODULE_VERSION, BuildConfig.VERSION_NAME)
+                putString(StatusProtocol.EXTRA_GBOARD_VERSION_NAME, packageInfo.versionName.orEmpty())
+                putLong(StatusProtocol.EXTRA_GBOARD_VERSION_CODE, gboardVersionCode)
+                putString(StatusProtocol.EXTRA_GBOARD_PACKAGE, PluginEntry.PACKAGE_NAME)
+                putString(StatusProtocol.EXTRA_PROCESS_NAME, runtimeProcessName)
+                putBoolean(StatusProtocol.EXTRA_SYNC_ENABLED, syncEnabled)
+                putInt(StatusProtocol.EXTRA_CONFIGURED_CAPACITY, manualCapacity)
+                putInt(StatusProtocol.EXTRA_EFFECTIVE_CAPACITY, effectiveCapacity)
+                putLong(StatusProtocol.EXTRA_RETENTION_MS, retentionMs)
+                putBoolean(StatusProtocol.EXTRA_DEBUG_LOGGING, debugLogging)
+                putBoolean(StatusProtocol.EXTRA_PRIMARY_CLASS_PRESENT, true)
+                putString(StatusProtocol.EXTRA_WATCHERS, RuntimeStatus.hookSummary())
+                putString(StatusProtocol.EXTRA_OBSERVED_PATHS, RuntimeStatus.observedSummary())
+                putBoolean(StatusProtocol.EXTRA_REWRITE_PROOF, RuntimeStatus.capacityProof)
+                putString(StatusProtocol.EXTRA_LAST_ERROR, RuntimeStatus.lastError)
+                putLong(StatusProtocol.EXTRA_TIMESTAMP_MS, System.currentTimeMillis())
+            }
+        }
+
         private fun pushStatus(context: Context, reason: String) {
             try {
                 val pref = readPreferences()
@@ -122,56 +185,12 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
                     return
                 }
 
-                val config = pref.getString(PluginEntry.SP_KEY, null)?.split(",")
-                val storedCapacity = config?.getOrNull(0)?.toIntOrNull()
-                    ?.coerceAtLeast(1) ?: PluginEntry.DEFAULT_NUM
-                val manualCapacity = pref.getInt("manual_clipboard_capacity", storedCapacity)
-                    .coerceAtLeast(1)
-                val syncEnabled = pref.getBoolean(
-                    PluginEntry.SP_KEY_SYNC_ANDROID_CLIPBOARD_CAPACITY,
-                    PluginEntry.DEFAULT_SYNC_ANDROID_CLIPBOARD_CAPACITY
-                )
-                val effectiveCapacity = if (syncEnabled) {
-                    PluginEntry.AUTO_CAPACITY
-                } else {
-                    manualCapacity
-                }
-                val retentionMs = config?.getOrNull(1)?.toLongOrNull()
-                    ?.coerceAtLeast(0L) ?: PluginEntry.DEFAULT_TIME
-                val debugLogging = pref.getBoolean(PluginEntry.SP_KEY_LOG, false)
-                val packageInfo = context.packageManager.getPackageInfo(PluginEntry.PACKAGE_NAME, 0)
-                val gboardVersionCode = if (android.os.Build.VERSION.SDK_INT >= 28) {
-                    packageInfo.longVersionCode
-                } else {
-                    @Suppress("DEPRECATION")
-                    packageInfo.versionCode.toLong()
-                }
-
                 val push = Intent(StatusProtocol.ACTION_PUSH)
                     .setClassName(
                         BuildConfig.APPLICATION_ID,
                         "com.chenyue404.gboardhook.RuntimeStatusReceiver"
                     )
-                    .putExtra(StatusProtocol.EXTRA_TOKEN, token)
-                    .putExtra(StatusProtocol.EXTRA_MODULE_VERSION, BuildConfig.VERSION_NAME)
-                    .putExtra(
-                        StatusProtocol.EXTRA_GBOARD_VERSION_NAME,
-                        packageInfo.versionName.orEmpty()
-                    )
-                    .putExtra(StatusProtocol.EXTRA_GBOARD_VERSION_CODE, gboardVersionCode)
-                    .putExtra(StatusProtocol.EXTRA_GBOARD_PACKAGE, PluginEntry.PACKAGE_NAME)
-                    .putExtra(StatusProtocol.EXTRA_PROCESS_NAME, runtimeProcessName)
-                    .putExtra(StatusProtocol.EXTRA_SYNC_ENABLED, syncEnabled)
-                    .putExtra(StatusProtocol.EXTRA_CONFIGURED_CAPACITY, manualCapacity)
-                    .putExtra(StatusProtocol.EXTRA_EFFECTIVE_CAPACITY, effectiveCapacity)
-                    .putExtra(StatusProtocol.EXTRA_RETENTION_MS, retentionMs)
-                    .putExtra(StatusProtocol.EXTRA_DEBUG_LOGGING, debugLogging)
-                    .putExtra(StatusProtocol.EXTRA_PRIMARY_CLASS_PRESENT, true)
-                    .putExtra(StatusProtocol.EXTRA_WATCHERS, RuntimeStatus.hookSummary())
-                    .putExtra(StatusProtocol.EXTRA_OBSERVED_PATHS, RuntimeStatus.observedSummary())
-                    .putExtra(StatusProtocol.EXTRA_REWRITE_PROOF, RuntimeStatus.capacityProof)
-                    .putExtra(StatusProtocol.EXTRA_LAST_ERROR, RuntimeStatus.lastError)
-                    .putExtra(StatusProtocol.EXTRA_TIMESTAMP_MS, System.currentTimeMillis())
+                    .putExtras(buildStatusBundle(context, token))
 
                 context.sendBroadcast(push)
                 logStatic(
@@ -197,7 +216,7 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
 
         runtimeProcessName = lpparam.processName.orEmpty()
         installContextCapture()
-        logStatic("status v4 transport loaded process=$runtimeProcessName")
+        logStatic("status v5 transport loaded process=$runtimeProcessName")
     }
 
     private fun installContextCapture() {
