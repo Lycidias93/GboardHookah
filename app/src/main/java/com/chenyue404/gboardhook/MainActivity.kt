@@ -287,12 +287,8 @@ class MainActivity : Activity() {
         renderWaitingStatus(getString(R.string.status_restarting_gboard))
 
         Thread {
-            val defaultImeBefore = Settings.Secure.getString(
-                contentResolver,
-                Settings.Secure.DEFAULT_INPUT_METHOD
-            ).orEmpty()
-            val pidBeforeResult = runRootCommand("pidof ${PluginEntry.PACKAGE_NAME}")
-            if (pidBeforeResult.exitCode != 0 && pidBeforeResult.stdout.isBlank()) {
+            val rootCheck = runRootCommand("id -u")
+            if (rootCheck.exitCode != 0 || rootCheck.stdout.trim() != "0") {
                 runOnUiThread {
                     btRestartGboard.isEnabled = true
                     Toast.makeText(
@@ -305,10 +301,15 @@ class MainActivity : Activity() {
                 return@Thread
             }
 
-            val pidBefore = pidBeforeResult.stdout
+            val defaultImeBefore = Settings.Secure.getString(
+                contentResolver,
+                Settings.Secure.DEFAULT_INPUT_METHOD
+            ).orEmpty()
+            val pidBefore = runRootCommand("pidof ${PluginEntry.PACKAGE_NAME}")
+                .stdout
                 .trim()
                 .split(Regex("\\s+"))
-                .firstOrNull { it.all(Char::isDigit) }
+                .firstOrNull { value -> value.isNotEmpty() && value.all { ch -> ch.isDigit() } }
 
             val outcome = if (pidBefore == null) {
                 "not_running"
@@ -322,7 +323,9 @@ class MainActivity : Activity() {
                         .stdout
                         .trim()
                         .split(Regex("\\s+"))
-                        .firstOrNull { it.all(Char::isDigit) }
+                        .firstOrNull {
+                            value -> value.isNotEmpty() && value.all { ch -> ch.isDigit() }
+                        }
                     when {
                         pidAfter.isNullOrBlank() -> "stopped_pending_next_use"
                         pidAfter == pidBefore -> "stale_pid"
