@@ -13,7 +13,7 @@ Use the configured clipboard capacity and retention window across the Gboard cli
 - Supports modern Bundle query limits (`QUERY_ARG_SQL_LIMIT` and `QUERY_ARG_LIMIT`).
 - Covers relevant SQLite `query(...)` and clipboard `rawQuery(...)` paths.
 - Keeps timestamp retention rewriting tied to the configured retention value.
-- Adds an optional **Sync Android clipboard capacity** switch. When enabled, the configured capacity is applied to the extended Gboard-backed paste-history query paths as well as the legacy Gboard path. When disabled, GboardHookah falls back to the conservative upstream-style legacy capacity rewrite.
+- Adds **Follow Android clipboard history capacity**, enabled by default. In this mode GboardHookah removes its own capacity cap from the observed Gboard history path so Gboard can follow the retained history available underneath it. Users who turn this mode off can set a separate manual Gboard clipboard capacity.
 - Uses defensive hook callbacks so a changed Gboard method does not crash the target process just because one optional hook path no longer matches.
 - Shows authenticated live runtime status from the injected Gboard process. Status refresh uses an ordered request/result path and does not depend on Gboard being allowed to resolve the GboardHookah package through app-list visibility filters such as Hide My Applist.
 - Runtime-status requests are authenticated by an Android signature-level permission owned by GboardHookah. The injected Gboard receiver therefore no longer depends on LSPosed exposing a newly written shared token or on framework sender-package attribution. The request token is used only as a correlation nonce for the ordered result.
@@ -24,7 +24,7 @@ Use the configured clipboard capacity and retention window across the Gboard cli
 - Uses its own application id: `com.lycidias93.gboardhookah`.
 - Uses an English-only settings UI, CI debug builds for development verification, and a separate stable-signed public release path.
 
-Android's framework clipboard itself exposes one current system clip rather than a configurable multi-item history. The synchronization switch therefore targets the Gboard-backed history/query surfaces used by Gboard and Android paste UI integrations; it does not invent or modify a separate Android OS history database.
+Android's framework clipboard itself exposes one current system clip rather than a configurable multi-item history. The history-capacity mode therefore targets the Gboard-backed history/query surfaces used by Gboard and Android paste UI integrations; it does not invent or modify a separate Android OS history database.
 
 ## Installation / rollback
 
