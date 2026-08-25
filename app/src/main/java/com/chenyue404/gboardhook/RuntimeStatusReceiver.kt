@@ -79,6 +79,10 @@ class RuntimeStatusReceiver : BroadcastReceiver() {
                 StatusProtocol.EXTRA_PROCESS_NAME,
                 source.getStringExtra(StatusProtocol.EXTRA_PROCESS_NAME).orEmpty()
             )
+            .putString(
+                StatusProtocol.EXTRA_CONFIG_SOURCE,
+                source.getStringExtra(StatusProtocol.EXTRA_CONFIG_SOURCE).orEmpty()
+            )
             .putBoolean(
                 StatusProtocol.EXTRA_SYNC_ENABLED,
                 source.getBooleanExtra(StatusProtocol.EXTRA_SYNC_ENABLED, false)
@@ -155,6 +159,10 @@ class RuntimeStatusReceiver : BroadcastReceiver() {
             .putExtra(
                 StatusProtocol.EXTRA_PROCESS_NAME,
                 pref.getString(StatusProtocol.EXTRA_PROCESS_NAME, "").orEmpty()
+            )
+            .putExtra(
+                StatusProtocol.EXTRA_CONFIG_SOURCE,
+                pref.getString(StatusProtocol.EXTRA_CONFIG_SOURCE, "").orEmpty()
             )
             .putExtra(
                 StatusProtocol.EXTRA_SYNC_ENABLED,
