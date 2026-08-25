@@ -17,6 +17,7 @@ Use the configured clipboard capacity and retention window across the Gboard cli
 - Uses defensive hook callbacks so a changed Gboard method does not crash the target process just because one optional hook path no longer matches.
 - Shows authenticated live runtime status from the injected Gboard process. Status refresh uses an ordered request/result path and does not depend on Gboard being allowed to resolve the GboardHookah package through app-list visibility filters such as Hide My Applist.
 - Runtime-status requests are authenticated by an Android signature-level permission owned by GboardHookah. The injected Gboard receiver therefore no longer depends on LSPosed exposing a newly written shared token or on framework sender-package attribution. The request token is used only as a correlation nonce for the ordered result.
+- Synchronizes the current capacity, retention, sync and debug settings over that same authenticated channel into the injected Gboard process. The injected side persists them in Gboard-private storage and the functional clipboard hooks read from that runtime config, avoiding stale/default values from the legacy XSharedPreferences bridge.
 - Provides a **Restart Gboard** button. With root approval it sends `TERM` only to the current Gboard main process, preserves the configured default IME, does not use `am force-stop`, and automatically refreshes runtime status after the restart.
 - Uses its own application id: `com.lycidias93.gboardhookah`.
 - Uses an English-only settings UI and reproducible debug APK builds in GitHub Actions.
@@ -29,9 +30,9 @@ GboardHookah can be installed next to another GboardHook fork because it has a s
 
 Rollback is simply: disable GboardHookah and re-enable the previous module. No clipboard database migration is performed by this module.
 
-After applying changed settings, use **Restart Gboard** or restart Gboard manually. First-time LSPosed/module setup may still require a phone reboot.
+Opening GboardHookah or pressing **Refresh status** synchronizes the app's saved configuration into the injected Gboard process. **Apply** persists the edited settings and immediately performs the same authenticated runtime sync. **Restart Gboard** remains available to force a clean process reload; first-time LSPosed/module setup may still require a phone reboot.
 
-If live status remains unavailable while LSPosed shows GboardHookah enabled and scoped to Gboard, collect the GboardHookah LSPosed status log rather than changing app-hiding policy blindly. Older versions used either a reverse explicit broadcast, an LSPosed-shared token, or framework sender attribution for request authentication. Version `1.4.14-hookah.15` moves request authentication to a signature-level Android permission and keeps the ordered request result as the primary status return path, removing those dependencies.
+If live status remains unavailable while LSPosed shows GboardHookah enabled and scoped to Gboard, collect the GboardHookah LSPosed status log rather than changing app-hiding policy blindly. Older versions used either a reverse explicit broadcast, an LSPosed-shared token, or framework sender attribution for request authentication. Version `1.4.14-hookah.15` moved request authentication to a signature-level Android permission. Version `1.4.15-hookah.16` additionally moves functional configuration delivery off the stale LSPosed shared-preference path and reports the active config source in Runtime status.
 
 ## Credits
 

@@ -10,20 +10,19 @@ import android.content.pm.ProviderInfo
 import android.os.Bundle
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XSharedPreferences
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Runtime status transport.
+ * Runtime status and configuration transport.
  *
  * Context acquisition is anchored to framework callbacks that necessarily receive a
- * real Gboard Context. In particular ContentProvider.attachInfo() runs in the injected
- * Gboard process before providers are used, avoiding lifecycle timing assumptions.
- * The primary clipboard hooks report their own real callbacks through reportHookEvent(),
- * so telemetry is evidence from the functional hook rather than a parallel observer.
+ * real Gboard Context. Authenticated ordered requests both refresh status and carry the
+ * current module configuration into the injected Gboard process. The configuration is
+ * persisted in Gboard-private storage so functional hooks do not depend on LSPosed's
+ * legacy cross-package SharedPreferences bridge.
  */
 class StatusPluginEntryV3 : IXposedHookLoadPackage {
     companion object {
@@ -44,10 +43,15 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
         fun captureRuntimeContext(context: Context, reason: String) {
             val appContext = context.applicationContext ?: context
             val firstContext = runtimeContext == null
+            if (firstContext) {
+                RuntimeConfig.load(appContext)
+            }
             runtimeContext = appContext
             registerRequestReceiver(appContext)
             if (firstContext) {
-                logStatic("runtime context ready reason=$reason")
+                logStatic(
+                    "runtime context ready reason=$reason configSource=${RuntimeConfig.source}"
+                )
                 pushStatus(appContext, "context-$reason")
             }
         }
@@ -92,11 +96,21 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
                         return
                     }
 
-                    // Authentication is enforced by Android at receiver registration time:
-                    // only senders holding our signature-level status permission can reach
-                    // this receiver. The request token is therefore only a correlation nonce
-                    // that binds the ordered result to the app's current refresh request.
+                    // Android enforces the signature permission at receiver registration.
+                    // The token is only a per-request correlation nonce.
                     sessionStatusToken = suppliedToken
+                    val configApplied = RuntimeConfig.applyAuthenticatedRequest(
+                        receiverContext.applicationContext,
+                        intent
+                    )
+                    if (configApplied) {
+                        logStatic(
+                            "runtime config synchronized source=${RuntimeConfig.source} " +
+                                "manual=${RuntimeConfig.manualCapacity} " +
+                                "retentionMs=${RuntimeConfig.retentionMs} " +
+                                "sync=${RuntimeConfig.syncEnabled} debug=${RuntimeConfig.debugLogging}"
+                        )
+                    }
 
                     try {
                         setResultExtras(buildStatusBundle(receiverContext, suppliedToken))
@@ -106,9 +120,6 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
                         logStatic("ordered status response failed: $t")
                     }
 
-                    // Keep the explicit push channel as a compatibility fallback for later
-                    // hook events. It can reuse the nonce established by the authenticated
-                    // ordered request without depending on cross-process shared preferences.
                     pushStatus(receiverContext.applicationContext, "refresh-request")
                 }
             }
@@ -151,24 +162,6 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
         }
 
         private fun buildStatusBundle(context: Context, token: String): Bundle {
-            val pref = readPreferences()
-            val config = pref.getString(PluginEntry.SP_KEY, null)?.split(",")
-            val storedCapacity = config?.getOrNull(0)?.toIntOrNull()
-                ?.coerceAtLeast(1) ?: PluginEntry.DEFAULT_NUM
-            val manualCapacity = pref.getInt("manual_clipboard_capacity", storedCapacity)
-                .coerceAtLeast(1)
-            val syncEnabled = pref.getBoolean(
-                PluginEntry.SP_KEY_SYNC_ANDROID_CLIPBOARD_CAPACITY,
-                PluginEntry.DEFAULT_SYNC_ANDROID_CLIPBOARD_CAPACITY
-            )
-            val effectiveCapacity = if (syncEnabled) {
-                PluginEntry.AUTO_CAPACITY
-            } else {
-                manualCapacity
-            }
-            val retentionMs = config?.getOrNull(1)?.toLongOrNull()
-                ?.coerceAtLeast(0L) ?: PluginEntry.DEFAULT_TIME
-            val debugLogging = pref.getBoolean(PluginEntry.SP_KEY_LOG, false)
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
             val gboardVersionCode = if (android.os.Build.VERSION.SDK_INT >= 28) {
                 packageInfo.longVersionCode
@@ -184,11 +177,7 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
                 putLong(StatusProtocol.EXTRA_GBOARD_VERSION_CODE, gboardVersionCode)
                 putString(StatusProtocol.EXTRA_GBOARD_PACKAGE, PluginEntry.PACKAGE_NAME)
                 putString(StatusProtocol.EXTRA_PROCESS_NAME, runtimeProcessName)
-                putBoolean(StatusProtocol.EXTRA_SYNC_ENABLED, syncEnabled)
-                putInt(StatusProtocol.EXTRA_CONFIGURED_CAPACITY, manualCapacity)
-                putInt(StatusProtocol.EXTRA_EFFECTIVE_CAPACITY, effectiveCapacity)
-                putLong(StatusProtocol.EXTRA_RETENTION_MS, retentionMs)
-                putBoolean(StatusProtocol.EXTRA_DEBUG_LOGGING, debugLogging)
+                RuntimeConfig.appendToStatus(this)
                 putBoolean(StatusProtocol.EXTRA_PRIMARY_CLASS_PRESENT, true)
                 putString(StatusProtocol.EXTRA_WATCHERS, RuntimeStatus.hookSummary())
                 putString(StatusProtocol.EXTRA_OBSERVED_PATHS, RuntimeStatus.observedSummary())
@@ -200,9 +189,7 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
 
         private fun pushStatus(context: Context, reason: String) {
             try {
-                val pref = readPreferences()
                 val token = sessionStatusToken
-                    ?: pref.getString(StatusProtocol.PREF_TOKEN, null)
                 if (token.isNullOrBlank()) {
                     logStatic("status push skipped reason=$reason token=missing")
                     return
@@ -226,9 +213,6 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
             }
         }
 
-        private fun readPreferences(): XSharedPreferences =
-            XSharedPreferences(BuildConfig.APPLICATION_ID, PluginEntry.SP_FILE_NAME).also { it.reload() }
-
         private fun logStatic(message: String) {
             XposedBridge.log("$STATUS_TAG $message")
         }
@@ -239,7 +223,7 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
 
         runtimeProcessName = lpparam.processName.orEmpty()
         installContextCapture()
-        logStatic("status v7 transport loaded process=$runtimeProcessName")
+        logStatic("status v8 transport loaded process=$runtimeProcessName")
     }
 
     private fun installContextCapture() {

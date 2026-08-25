@@ -36,6 +36,14 @@ class MainActivity : Activity() {
         val stderr: String
     )
 
+    private data class AppConfig(
+        val manualCapacity: Int,
+        val retentionMs: Long,
+        val ignorePackageLimit: Boolean,
+        val syncEnabled: Boolean,
+        val debugLogging: Boolean
+    )
+
     private var modulePreferences: SharedPreferences? = null
     private var statusToken: String? = null
     private var statusReceiverRegistered = false
@@ -143,15 +151,19 @@ class MainActivity : Activity() {
                 ?: PluginEntry.DEFAULT_TIME
             val switchOn = sw0.isChecked.toString()
 
-            pref.edit().apply {
-                putString(PluginEntry.SP_KEY, "$manualNum,$time,$switchOn")
-                putInt(SP_KEY_MANUAL_CAPACITY, manualNum)
-                putBoolean(PluginEntry.SP_KEY_LOG, swLog.isChecked)
-                putBoolean(
+            val saved = pref.edit()
+                .putString(PluginEntry.SP_KEY, "$manualNum,$time,$switchOn")
+                .putInt(SP_KEY_MANUAL_CAPACITY, manualNum)
+                .putBoolean(PluginEntry.SP_KEY_LOG, swLog.isChecked)
+                .putBoolean(
                     PluginEntry.SP_KEY_SYNC_ANDROID_CLIPBOARD_CAPACITY,
                     swSyncAndroidClipboardCapacity.isChecked
                 )
-                apply()
+                .commit()
+
+            if (!saved) {
+                Toast.makeText(this, R.string.config_read_failed, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
             }
 
             val message = if (swSyncAndroidClipboardCapacity.isChecked) {
@@ -160,7 +172,7 @@ class MainActivity : Activity() {
                 R.string.settings_applied
             }
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-            renderWaitingStatus(getString(R.string.status_restart_required))
+            requestLiveStatus()
         }
 
         btStatus.setOnClickListener {
@@ -241,6 +253,30 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun readAppConfig(pref: SharedPreferences?): AppConfig? {
+        if (pref == null) return null
+        val stored = pref.getString(PluginEntry.SP_KEY, null)?.split(",")
+        val storedCapacity = stored?.getOrNull(0)?.toIntOrNull()
+        val fallbackManualCapacity = when (storedCapacity) {
+            null, PluginEntry.AUTO_CAPACITY -> PluginEntry.DEFAULT_NUM
+            else -> storedCapacity.coerceAtLeast(1)
+        }
+        return AppConfig(
+            manualCapacity = pref.getInt(
+                SP_KEY_MANUAL_CAPACITY,
+                fallbackManualCapacity
+            ).coerceAtLeast(1),
+            retentionMs = stored?.getOrNull(1)?.toLongOrNull()
+                ?.coerceAtLeast(0L) ?: PluginEntry.DEFAULT_TIME,
+            ignorePackageLimit = stored?.getOrNull(2)?.equals("true", true) == true,
+            syncEnabled = pref.getBoolean(
+                PluginEntry.SP_KEY_SYNC_ANDROID_CLIPBOARD_CAPACITY,
+                PluginEntry.DEFAULT_SYNC_ANDROID_CLIPBOARD_CAPACITY
+            ),
+            debugLogging = pref.getBoolean(PluginEntry.SP_KEY_LOG, false)
+        )
+    }
+
     private fun requestLiveStatus() {
         val token = statusToken
         if (token.isNullOrBlank()) {
@@ -255,6 +291,22 @@ class MainActivity : Activity() {
         val request = Intent(StatusProtocol.ACTION_REQUEST)
             .setPackage(PluginEntry.PACKAGE_NAME)
             .putExtra(StatusProtocol.EXTRA_TOKEN, token)
+
+        readAppConfig(modulePreferences)?.let { config ->
+            request
+                .putExtra(StatusProtocol.EXTRA_CONFIG_PRESENT, true)
+                .putExtra(
+                    StatusProtocol.EXTRA_CONFIG_MANUAL_CAPACITY,
+                    config.manualCapacity
+                )
+                .putExtra(StatusProtocol.EXTRA_CONFIG_RETENTION_MS, config.retentionMs)
+                .putExtra(
+                    StatusProtocol.EXTRA_CONFIG_IGNORE_PACKAGE_LIMIT,
+                    config.ignorePackageLimit
+                )
+                .putExtra(StatusProtocol.EXTRA_CONFIG_SYNC_ENABLED, config.syncEnabled)
+                .putExtra(StatusProtocol.EXTRA_CONFIG_DEBUG_LOGGING, config.debugLogging)
+        }
 
         try {
             sendOrderedBroadcast(
@@ -387,6 +439,7 @@ class MainActivity : Activity() {
             -1L
         )
         val processName = status.getString(StatusProtocol.EXTRA_PROCESS_NAME).orEmpty()
+        val configSource = status.getString(StatusProtocol.EXTRA_CONFIG_SOURCE).orEmpty()
         val syncEnabled = status.getBoolean(StatusProtocol.EXTRA_SYNC_ENABLED, false)
         val configuredCapacity = status.getInt(
             StatusProtocol.EXTRA_CONFIGURED_CAPACITY,
@@ -436,6 +489,7 @@ class MainActivity : Activity() {
             appendLine("Module: $moduleVersion")
             appendLine("Gboard: $gboardVersion ($gboardVersionCode)")
             appendLine("Process: $processName")
+            appendLine("Config bridge: ${configSource.ifBlank { "unknown" }}")
             appendLine("Capacity sync: ${if (syncEnabled) "ON" else "OFF"}")
             appendLine("Manual capacity: $configuredCapacity")
             appendLine("Effective capacity: $effectiveLabel")
