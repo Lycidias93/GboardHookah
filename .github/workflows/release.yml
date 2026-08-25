@@ -1,6 +1,11 @@
 name: Publish signed GboardHookah release
 
 on:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/release-candidate.trigger'
   workflow_dispatch:
     inputs:
       publish:
