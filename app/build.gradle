@@ -20,8 +20,8 @@ android {
         applicationId "com.lycidias93.gboardhookah"
         minSdk 23
         targetSdk 31
-        versionCode 27
-        versionName "1.4.16-hookah.17"
+        versionCode 28
+        versionName "1.4.17-hookah.18"
     }
 
     buildFeatures {
@@ -65,8 +65,8 @@ android {
             def versionName = variant.versionName
             def versionCode = variant.versionCode
             def buildType = variant.buildType.name
-            def flavor = variant.flavorName ?: ""
-            def environment = flavor ? "${flavor}_${buildType}" : buildType
+            def flavorName = variant.flavorName ?: ""
+            def environment = flavorName ? "${flavorName}_${buildType}" : buildType
             def date = new Date()
             def sdf = new SimpleDateFormat("yyyyMMdd_HHmmss")
             sdf.setTimeZone(TimeZone.getTimeZone("UTC"))
