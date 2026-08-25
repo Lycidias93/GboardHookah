@@ -25,11 +25,13 @@ The first public release intentionally keeps release minification disabled. Xpos
 ## Publication flow
 
 1. Keep the release version in `app/build.gradle` and the matching top section in `CHANGELOG.md` synchronized.
-2. Merge the release candidate to `master` only after the normal build workflow is green, including the unsigned release-variant build and 16 KB alignment check.
-3. In GitHub Actions, run **Publish signed GboardHookah release** from `master` with **publish** left off. The workflow decodes the private keystore, builds `assembleRelease`, verifies 16 KB ZIP alignment, verifies the APK signature, compares the actual certificate fingerprint with `GBOARDHOOKAH_RELEASE_CERT_SHA256`, and uploads a signed release-candidate APK without creating a public release.
-4. Install that signed candidate on the target device and complete live Gboard/LSPosed acceptance. For a stable release, do not substitute an earlier debug-signed APK for this step.
-5. After live acceptance, run the same workflow again with **publish** enabled. It repeats the signing and verification gates, extracts the matching user-facing changelog section, and creates the GitHub Release/tag with the signed APK attached.
+2. Merge the release candidate to `master` only after the normal build workflow is green, including the signed throwaway-key release-variant build and 16 KB alignment check.
+3. Produce the stable-signed candidate from `master` without publishing it. Either run **Publish signed GboardHookah release** with **publish** left off, or bump `.github/release-candidate.trigger` on `master`. The push-trigger path is candidate-only: it decodes the private keystore, builds `assembleRelease`, verifies 16 KB ZIP alignment, verifies the APK signature, compares the actual certificate fingerprint with `GBOARDHOOKAH_RELEASE_CERT_SHA256`, and uploads a signed release-candidate APK without creating a public release.
+4. Install that signed candidate on the target device and complete live Gboard/LSPosed acceptance. For a stable release, do not substitute an earlier debug- or throwaway-key-signed APK for this step.
+5. After live acceptance, run **Publish signed GboardHookah release** from `master` with **publish** enabled. It repeats the signing and verification gates, extracts the matching user-facing changelog section, and creates the GitHub Release/tag with the signed APK attached.
 6. Never rotate the public signing key casually. A key change is an Android package-signature migration and must be treated as a breaking install/update event.
+
+The repository trigger exists so automation that can safely write to `master` but cannot invoke `workflow_dispatch` can request a candidate without weakening the publication gate. It never enables `publish` by itself; public publication remains an explicit `workflow_dispatch` action after live acceptance.
 
 ## First stable-release migration
 
