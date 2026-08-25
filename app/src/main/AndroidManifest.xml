@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <permission
+        android:name="com.lycidias93.gboardhookah.permission.STATUS"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.lycidias93.gboardhookah.permission.STATUS" />
+
     <queries>
         <package android:name="com.google.android.inputmethod.latin" />
     </queries>

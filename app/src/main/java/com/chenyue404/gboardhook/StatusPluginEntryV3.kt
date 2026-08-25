@@ -29,7 +29,6 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
     companion object {
         private const val STATUS_TAG = "xposed-GboardHookah-Status-"
         private const val RECEIVER_EXPORTED_FLAG = 0x2
-        private const val ANDROID_14_API = 34
         private val requestReceiverRegistered = AtomicBoolean(false)
 
         @Volatile
@@ -88,27 +87,28 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
                 override fun onReceive(receiverContext: Context, intent: Intent) {
                     if (intent.action != StatusProtocol.ACTION_REQUEST) return
                     val suppliedToken = intent.getStringExtra(StatusProtocol.EXTRA_TOKEN) ?: return
-                    if (!isTrustedStatusRequest(this, suppliedToken)) {
-                        logStatic("status request rejected sender/token validation failed")
+                    if (!isOrderedBroadcast) {
+                        logStatic("status request ignored reason=non-ordered")
                         return
                     }
 
+                    // Authentication is enforced by Android at receiver registration time:
+                    // only senders holding our signature-level status permission can reach
+                    // this receiver. The request token is therefore only a correlation nonce
+                    // that binds the ordered result to the app's current refresh request.
                     sessionStatusToken = suppliedToken
 
-                    if (isOrderedBroadcast) {
-                        try {
-                            setResultExtras(buildStatusBundle(receiverContext, suppliedToken))
-                            logStatic("ordered status response returned in request channel")
-                        } catch (t: Throwable) {
-                            RuntimeStatus.callbackError("status-ordered-response", t)
-                            logStatic("ordered status response failed: $t")
-                        }
+                    try {
+                        setResultExtras(buildStatusBundle(receiverContext, suppliedToken))
+                        logStatic("ordered status response returned via signature permission channel")
+                    } catch (t: Throwable) {
+                        RuntimeStatus.callbackError("status-ordered-response", t)
+                        logStatic("ordered status response failed: $t")
                     }
 
-                    // Keep the explicit push channel as a compatibility fallback. Once a
-                    // trusted request has established a session token, later hook events can
-                    // reuse it even when LSPosed's legacy shared-preference bridge does not
-                    // expose newly written keys to the hooked process.
+                    // Keep the explicit push channel as a compatibility fallback for later
+                    // hook events. It can reuse the nonce established by the authenticated
+                    // ordered request without depending on cross-process shared preferences.
                     pushStatus(receiverContext.applicationContext, "refresh-request")
                 }
             }
@@ -120,44 +120,34 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
                         "registerReceiver",
                         BroadcastReceiver::class.java,
                         IntentFilter::class.java,
+                        String::class.java,
+                        android.os.Handler::class.java,
                         Integer.TYPE
                     )
-                    method.invoke(context, receiver, filter, RECEIVER_EXPORTED_FLAG)
+                    method.invoke(
+                        context,
+                        receiver,
+                        filter,
+                        StatusProtocol.PERMISSION_STATUS,
+                        null,
+                        RECEIVER_EXPORTED_FLAG
+                    )
                 } else {
                     @Suppress("DEPRECATION")
-                    context.registerReceiver(receiver, filter)
+                    context.registerReceiver(
+                        receiver,
+                        filter,
+                        StatusProtocol.PERMISSION_STATUS,
+                        null
+                    )
                 }
                 RuntimeStatus.hookReady("status-channel")
-                logStatic("status channel ready")
+                logStatic("status channel ready permission=${StatusProtocol.PERMISSION_STATUS}")
             } catch (t: Throwable) {
                 requestReceiverRegistered.set(false)
                 RuntimeStatus.hookError("status-channel", t)
                 logStatic("status channel registration failed: $t")
             }
-        }
-
-        private fun isTrustedStatusRequest(receiver: BroadcastReceiver, suppliedToken: String): Boolean {
-            if (android.os.Build.VERSION.SDK_INT >= ANDROID_14_API) {
-                val sentFromPackage = try {
-                    BroadcastReceiver::class.java
-                        .getMethod("getSentFromPackage")
-                        .invoke(receiver) as? String
-                } catch (t: Throwable) {
-                    logStatic("status sender lookup unavailable: ${t.javaClass.simpleName}")
-                    null
-                }
-                if (sentFromPackage == BuildConfig.APPLICATION_ID) {
-                    logStatic("status request trusted via Android sender attribution")
-                    return true
-                }
-            }
-
-            val expectedToken = readPreferences().getString(StatusProtocol.PREF_TOKEN, null)
-            val tokenMatch = !expectedToken.isNullOrBlank() && suppliedToken == expectedToken
-            if (tokenMatch) {
-                logStatic("status request trusted via shared token fallback")
-            }
-            return tokenMatch
         }
 
         private fun buildStatusBundle(context: Context, token: String): Bundle {
@@ -249,7 +239,7 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
 
         runtimeProcessName = lpparam.processName.orEmpty()
         installContextCapture()
-        logStatic("status v6 transport loaded process=$runtimeProcessName")
+        logStatic("status v7 transport loaded process=$runtimeProcessName")
     }
 
     private fun installContextCapture() {
