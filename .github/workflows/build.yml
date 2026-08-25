@@ -36,20 +36,49 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build install APK
-        run: ./gradlew :app:assembleDebug --stacktrace
-
-      - name: Verify 16 KB native-library ZIP alignment
+      - name: Generate CI-only release signing key
+        shell: bash
         run: |
-          APK="$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
-          ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -type f -name zipalign -print | sort -V | tail -n 1)"
-          test -n "$APK"
-          test -x "$ZIPALIGN"
-          "$ZIPALIGN" -c -P 16 -v 4 "$APK"
+          set -euo pipefail
+          mkdir -p app/AndroidKeystore
+          keytool -genkeypair \
+            -keystore app/AndroidKeystore/ci-release.jks \
+            -storepass ci-test-password \
+            -keypass ci-test-password \
+            -alias ci-test \
+            -dname "CN=GboardHookah CI Test,O=Lycidias93,C=DE" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 1 \
+            -noprompt
 
-      - name: Upload install APK
+      - name: Build CI debug and signed release variants
+        env:
+          GBOARDHOOKAH_RELEASE_KEYSTORE_PATH: AndroidKeystore/ci-release.jks
+          GBOARDHOOKAH_RELEASE_STORE_PASSWORD: ci-test-password
+          GBOARDHOOKAH_RELEASE_KEY_ALIAS: ci-test
+          GBOARDHOOKAH_RELEASE_KEY_PASSWORD: ci-test-password
+        run: ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
+
+      - name: Verify APK structure and 16 KB native-library ZIP alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEBUG_APK="$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
+          RELEASE_APK="$(find app/build/outputs/apk/release -type f -name '*.apk' -print -quit)"
+          ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -type f -name zipalign -print | sort -V | tail -n 1)"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner -print | sort -V | tail -n 1)"
+          test -n "$DEBUG_APK"
+          test -n "$RELEASE_APK"
+          test -x "$ZIPALIGN"
+          test -x "$APKSIGNER"
+          "$ZIPALIGN" -c -P 16 -v 4 "$DEBUG_APK"
+          "$ZIPALIGN" -c -P 16 -v 4 "$RELEASE_APK"
+          "$APKSIGNER" verify --verbose "$RELEASE_APK"
+
+      - name: Upload CI debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: GboardHookah-install-apk
+          name: GboardHookah-ci-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
