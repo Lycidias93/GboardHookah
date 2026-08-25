@@ -59,38 +59,30 @@ class PluginEntry : IXposedHookLoadPackage {
         loadLibrary("dexkit")
     }
 
+    // Keep XSharedPreferences only for the pre-Context renamed-package decision. All
+    // functional runtime configuration is sourced from RuntimeConfig after Gboard Context
+    // becomes available, because the legacy cross-package bridge can be stale on newer
+    // Android/LSPosed combinations.
     private val modulePreferences by lazy {
         XSharedPreferences(BuildConfig.APPLICATION_ID, SP_FILE_NAME)
     }
 
     private fun getPref(): XSharedPreferences = modulePreferences
 
-    private val configuredClipboardTextSize by lazy {
-        getPref().getString(SP_KEY, null)?.split(",")?.getOrNull(0)?.toIntOrNull()
-            ?.coerceAtLeast(1)
-            ?: DEFAULT_NUM
-    }
+    private val configuredClipboardTextSize: Int
+        get() = RuntimeConfig.manualCapacity
 
-    private val clipboardTextTime by lazy {
-        getPref().getString(SP_KEY, null)?.split(",")?.getOrNull(1)?.toLongOrNull()
-            ?.coerceAtLeast(0L)
-            ?: DEFAULT_TIME
-    }
+    private val clipboardTextTime: Long
+        get() = RuntimeConfig.retentionMs
 
-    private val syncAndroidClipboardCapacity by lazy {
-        getPref().getBoolean(
-            SP_KEY_SYNC_ANDROID_CLIPBOARD_CAPACITY,
-            DEFAULT_SYNC_ANDROID_CLIPBOARD_CAPACITY
-        )
-    }
+    private val syncAndroidClipboardCapacity: Boolean
+        get() = RuntimeConfig.syncEnabled
 
-    private val clipboardTextSize by lazy {
-        if (syncAndroidClipboardCapacity) AUTO_CAPACITY else configuredClipboardTextSize
-    }
+    private val clipboardTextSize: Int
+        get() = RuntimeConfig.effectiveCapacity()
 
-    private val logSwitch by lazy {
-        getPref().getBoolean(SP_KEY_LOG, false)
-    }
+    private val logSwitch: Boolean
+        get() = RuntimeConfig.debugLogging
 
     private fun log(str: String) {
         if (logSwitch) {
@@ -119,10 +111,11 @@ class PluginEntry : IXposedHookLoadPackage {
 
         hookGboardFlags(classLoader)
         hookClipboardProviderLegacy(classLoader)
-        if (syncAndroidClipboardCapacity) {
-            hookClipboardProviderBundle(classLoader)
-            hookSQLiteClipboardQueries()
-        }
+        // Register modern paths unconditionally. RuntimeConfig decides per callback whether
+        // the enhanced sync behavior is active, so configuration changes do not depend on
+        // stale pre-Context preferences.
+        hookClipboardProviderBundle(classLoader)
+        hookSQLiteClipboardQueries()
         hookHashSetCompatibility()
     }
 
@@ -240,6 +233,7 @@ class PluginEntry : IXposedHookLoadPackage {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         var capacityHandled = false
                         try {
+                            if (!syncAndroidClipboardCapacity) return
                             val originalArgs = param.args[2] as? Bundle ?: return
                             val queryArgs = Bundle(originalArgs)
                             val selection = queryArgs
@@ -451,6 +445,7 @@ class PluginEntry : IXposedHookLoadPackage {
         label: String
     ) {
         try {
+            if (!syncAndroidClipboardCapacity) return
             val table = param.args.getOrNull(tableIndex)?.toString()
             if (!isClipboardTable(table)) {
                 return
@@ -481,6 +476,7 @@ class PluginEntry : IXposedHookLoadPackage {
         label: String
     ) {
         try {
+            if (!syncAndroidClipboardCapacity) return
             val sql = param.args.getOrNull(sqlIndex) as? String ?: return
             if (!CLIPBOARD_SQL_REGEX.containsMatchIn(sql)) {
                 return
