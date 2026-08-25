@@ -25,13 +25,14 @@ The first public release intentionally keeps release minification disabled. Xpos
 ## Publication flow
 
 1. Keep the release version in `app/build.gradle` and the matching top section in `CHANGELOG.md` synchronized.
-2. Merge the release candidate to `master` only after the normal build workflow is green.
-3. In GitHub Actions, run **Publish signed GboardHookah release** from `master`.
-4. The workflow decodes the private keystore, builds `assembleRelease`, verifies 16 KB ZIP alignment, verifies the APK signature, compares the actual certificate fingerprint with `GBOARDHOOKAH_RELEASE_CERT_SHA256`, extracts the matching user-facing changelog section, and creates the GitHub Release/tag with the signed APK attached.
-5. Never rotate the public signing key casually. A key change is an Android package-signature migration and must be treated as a breaking install/update event.
+2. Merge the release candidate to `master` only after the normal build workflow is green, including the unsigned release-variant build and 16 KB alignment check.
+3. In GitHub Actions, run **Publish signed GboardHookah release** from `master` with **publish** left off. The workflow decodes the private keystore, builds `assembleRelease`, verifies 16 KB ZIP alignment, verifies the APK signature, compares the actual certificate fingerprint with `GBOARDHOOKAH_RELEASE_CERT_SHA256`, and uploads a signed release-candidate APK without creating a public release.
+4. Install that signed candidate on the target device and complete live Gboard/LSPosed acceptance. For a stable release, do not substitute an earlier debug-signed APK for this step.
+5. After live acceptance, run the same workflow again with **publish** enabled. It repeats the signing and verification gates, extracts the matching user-facing changelog section, and creates the GitHub Release/tag with the signed APK attached.
+6. Never rotate the public signing key casually. A key change is an Android package-signature migration and must be treated as a breaking install/update event.
 
 ## First stable-release migration
 
 All pre-public-release CI APKs were development artifacts built with Android debug signing. Because GitHub-hosted runners are ephemeral, those debug signing identities were not stable across builds.
 
-For a device that already has one of those test APKs installed, the first public stable APK therefore requires a one-time uninstall/reinstall. App preferences are normally removed by uninstall, so re-enter the desired GboardHookah settings and verify LSPosed enablement/scope afterward. Once the first stable APK is installed, subsequent stable releases must keep the same release signing key so normal in-place upgrades work.
+For a device that already has one of those test APKs installed, the first public stable APK therefore requires a one-time uninstall/reinstall. App preferences are normally removed by uninstall, so use **Copy log** or otherwise record the current settings first, then re-enter the desired GboardHookah settings and verify LSPosed enablement/scope afterward. Once the first stable APK is installed, subsequent stable releases must keep the same release signing key so normal in-place upgrades work.
