@@ -4,6 +4,7 @@ object StatusProtocol {
     const val ACTION_REQUEST = "com.lycidias93.gboardhookah.STATUS_REQUEST"
     const val ACTION_RESPONSE = "com.lycidias93.gboardhookah.STATUS_RESPONSE"
     const val ACTION_PUSH = "com.lycidias93.gboardhookah.STATUS_PUSH"
+    const val PERMISSION_STATUS = "com.lycidias93.gboardhookah.permission.STATUS"
 
     const val PREF_TOKEN = "status_channel_token"
     const val PREF_SNAPSHOT_PRESENT = "runtime_status_snapshot_present"
