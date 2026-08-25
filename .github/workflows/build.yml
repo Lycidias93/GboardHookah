@@ -39,13 +39,19 @@ jobs:
       - name: Build CI debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
 
+      - name: Build unsigned release variant
+        run: ./gradlew :app:assembleRelease --stacktrace
+
       - name: Verify 16 KB native-library ZIP alignment
         run: |
-          APK="$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
+          DEBUG_APK="$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
+          RELEASE_APK="$(find app/build/outputs/apk/release -type f -name '*.apk' -print -quit)"
           ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -type f -name zipalign -print | sort -V | tail -n 1)"
-          test -n "$APK"
+          test -n "$DEBUG_APK"
+          test -n "$RELEASE_APK"
           test -x "$ZIPALIGN"
-          "$ZIPALIGN" -c -P 16 -v 4 "$APK"
+          "$ZIPALIGN" -c -P 16 -v 4 "$DEBUG_APK"
+          "$ZIPALIGN" -c -P 16 -v 4 "$RELEASE_APK"
 
       - name: Upload CI debug APK
         uses: actions/upload-artifact@v4
