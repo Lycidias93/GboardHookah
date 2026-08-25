@@ -108,6 +108,13 @@
             android:text="@string/status_not_checked"
             android:textIsSelectable="true" />
 
+        <com.chenyue404.gboardhook.CopyRuntimeLogButton
+            android:id="@+id/btCopyRuntimeLog"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/copy_runtime_log" />
+
         <TextView
             android:id="@+id/tvHint"
             android:layout_width="wrap_content"

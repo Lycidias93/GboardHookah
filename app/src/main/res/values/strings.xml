@@ -13,6 +13,8 @@
     <string name="runtime_status_title">Runtime status</string>
     <string name="refresh_status">Refresh status</string>
     <string name="restart_gboard">Restart Gboard</string>
+    <string name="copy_runtime_log">Copy log</string>
+    <string name="runtime_log_copied">Runtime log copied to clipboard</string>
     <string name="status_not_checked">Not checked yet</string>
     <string name="status_checking">Checking live Gboard hook…</string>
     <string name="status_no_live_response">No live response — restart Gboard and check LSPosed scope or app-hiding rules</string>
