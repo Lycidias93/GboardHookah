@@ -36,7 +36,7 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build install APK
+      - name: Build CI debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
 
       - name: Verify 16 KB native-library ZIP alignment
@@ -47,9 +47,9 @@ jobs:
           test -x "$ZIPALIGN"
           "$ZIPALIGN" -c -P 16 -v 4 "$APK"
 
-      - name: Upload install APK
+      - name: Upload CI debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: GboardHookah-install-apk
+          name: GboardHookah-ci-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
