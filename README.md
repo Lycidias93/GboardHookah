@@ -32,7 +32,7 @@ Use the APK attached to a GitHub **Release** for normal installation and updates
 
 GboardHookah can be installed next to another GboardHook fork because it has a separate package id. Do **not** enable two clipboard hook modules for Gboard at the same time in LSPosed. Disable the old module before enabling GboardHookah.
 
-The first public stable release introduces a persistent release-signing identity. Pre-release CI/test APKs used ephemeral Android debug signing, so a device currently running one of those development builds needs a one-time uninstall before installing the first stable release. Re-enter the desired GboardHookah settings and verify LSPosed enablement/scope after that migration. Later public releases are intended to keep the same signing identity and support normal in-place upgrades.
+The first public stable release introduces a persistent release-signing identity. Pre-release CI/test APKs used ephemeral Android debug signing, so a device currently running one of those development builds needs a one-time uninstall before installing the first stable release. Use **Copy log** or otherwise note the current settings before uninstalling, then re-enter the desired GboardHookah settings and verify LSPosed enablement/scope after the migration. Later public releases are intended to keep the same signing identity and support normal in-place upgrades.
 
 Rollback is simply: disable GboardHookah and re-enable the previous module. No clipboard database migration is performed by this module.
 
