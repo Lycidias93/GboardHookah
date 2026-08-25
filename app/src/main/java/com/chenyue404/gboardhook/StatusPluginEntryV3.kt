@@ -29,6 +29,7 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
     companion object {
         private const val STATUS_TAG = "xposed-GboardHookah-Status-"
         private const val RECEIVER_EXPORTED_FLAG = 0x2
+        private const val ANDROID_14_API = 34
         private val requestReceiverRegistered = AtomicBoolean(false)
 
         @Volatile
@@ -36,6 +37,9 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
 
         @Volatile
         private var runtimeContext: Context? = null
+
+        @Volatile
+        private var sessionStatusToken: String? = null
 
         @JvmStatic
         fun captureRuntimeContext(context: Context, reason: String) {
@@ -84,9 +88,12 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
                 override fun onReceive(receiverContext: Context, intent: Intent) {
                     if (intent.action != StatusProtocol.ACTION_REQUEST) return
                     val suppliedToken = intent.getStringExtra(StatusProtocol.EXTRA_TOKEN) ?: return
-                    val expectedToken = readPreferences()
-                        .getString(StatusProtocol.PREF_TOKEN, null) ?: return
-                    if (suppliedToken != expectedToken) return
+                    if (!isTrustedStatusRequest(this, suppliedToken)) {
+                        logStatic("status request rejected sender/token validation failed")
+                        return
+                    }
+
+                    sessionStatusToken = suppliedToken
 
                     if (isOrderedBroadcast) {
                         try {
@@ -98,9 +105,10 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
                         }
                     }
 
-                    // Keep the explicit push channel as a compatibility fallback. The ordered
-                    // result above is the primary refresh path because it does not require
-                    // Gboard to resolve the module package, which can be filtered by HMA.
+                    // Keep the explicit push channel as a compatibility fallback. Once a
+                    // trusted request has established a session token, later hook events can
+                    // reuse it even when LSPosed's legacy shared-preference bridge does not
+                    // expose newly written keys to the hooked process.
                     pushStatus(receiverContext.applicationContext, "refresh-request")
                 }
             }
@@ -126,6 +134,30 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
                 RuntimeStatus.hookError("status-channel", t)
                 logStatic("status channel registration failed: $t")
             }
+        }
+
+        private fun isTrustedStatusRequest(receiver: BroadcastReceiver, suppliedToken: String): Boolean {
+            if (android.os.Build.VERSION.SDK_INT >= ANDROID_14_API) {
+                val sentFromPackage = try {
+                    BroadcastReceiver::class.java
+                        .getMethod("getSentFromPackage")
+                        .invoke(receiver) as? String
+                } catch (t: Throwable) {
+                    logStatic("status sender lookup unavailable: ${t.javaClass.simpleName}")
+                    null
+                }
+                if (sentFromPackage == BuildConfig.APPLICATION_ID) {
+                    logStatic("status request trusted via Android sender attribution")
+                    return true
+                }
+            }
+
+            val expectedToken = readPreferences().getString(StatusProtocol.PREF_TOKEN, null)
+            val tokenMatch = !expectedToken.isNullOrBlank() && suppliedToken == expectedToken
+            if (tokenMatch) {
+                logStatic("status request trusted via shared token fallback")
+            }
+            return tokenMatch
         }
 
         private fun buildStatusBundle(context: Context, token: String): Bundle {
@@ -179,7 +211,8 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
         private fun pushStatus(context: Context, reason: String) {
             try {
                 val pref = readPreferences()
-                val token = pref.getString(StatusProtocol.PREF_TOKEN, null)
+                val token = sessionStatusToken
+                    ?: pref.getString(StatusProtocol.PREF_TOKEN, null)
                 if (token.isNullOrBlank()) {
                     logStatic("status push skipped reason=$reason token=missing")
                     return
@@ -216,7 +249,7 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
 
         runtimeProcessName = lpparam.processName.orEmpty()
         installContextCapture()
-        logStatic("status v5 transport loaded process=$runtimeProcessName")
+        logStatic("status v6 transport loaded process=$runtimeProcessName")
     }
 
     private fun installContextCapture() {
