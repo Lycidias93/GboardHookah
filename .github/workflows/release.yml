@@ -1,0 +1,142 @@
+name: Publish signed GboardHookah release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gboardhookah-public-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GBOARDHOOKAH_RELEASE_KEYSTORE_PATH: AndroidKeystore/release.jks
+      GBOARDHOOKAH_RELEASE_KEYSTORE_B64: ${{ secrets.GBOARDHOOKAH_RELEASE_KEYSTORE_B64 }}
+      GBOARDHOOKAH_RELEASE_STORE_PASSWORD: ${{ secrets.GBOARDHOOKAH_RELEASE_STORE_PASSWORD }}
+      GBOARDHOOKAH_RELEASE_KEY_ALIAS: ${{ secrets.GBOARDHOOKAH_RELEASE_KEY_ALIAS }}
+      GBOARDHOOKAH_RELEASE_KEY_PASSWORD: ${{ secrets.GBOARDHOOKAH_RELEASE_KEY_PASSWORD }}
+      GBOARDHOOKAH_RELEASE_CERT_SHA256: ${{ secrets.GBOARDHOOKAH_RELEASE_CERT_SHA256 }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Validate release signing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GBOARDHOOKAH_RELEASE_KEYSTORE_B64:-}" || { echo "::error::Missing GBOARDHOOKAH_RELEASE_KEYSTORE_B64"; exit 1; }
+          test -n "${GBOARDHOOKAH_RELEASE_STORE_PASSWORD:-}" || { echo "::error::Missing GBOARDHOOKAH_RELEASE_STORE_PASSWORD"; exit 1; }
+          test -n "${GBOARDHOOKAH_RELEASE_KEY_ALIAS:-}" || { echo "::error::Missing GBOARDHOOKAH_RELEASE_KEY_ALIAS"; exit 1; }
+          test -n "${GBOARDHOOKAH_RELEASE_CERT_SHA256:-}" || { echo "::error::Missing GBOARDHOOKAH_RELEASE_CERT_SHA256"; exit 1; }
+
+      - name: Materialize release keystore
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p app/AndroidKeystore
+          printf '%s' "$GBOARDHOOKAH_RELEASE_KEYSTORE_B64" | base64 --decode > app/AndroidKeystore/release.jks
+          test -s app/AndroidKeystore/release.jks
+
+      - name: Build signed release APK
+        run: ./gradlew :app:assembleRelease --stacktrace
+
+      - name: Verify release APK and signing certificate
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find app/build/outputs/apk/release -type f -name '*.apk' -print -quit)"
+          ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -type f -name zipalign -print | sort -V | tail -n 1)"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner -print | sort -V | tail -n 1)"
+          test -n "$APK"
+          test -x "$ZIPALIGN"
+          test -x "$APKSIGNER"
+          "$ZIPALIGN" -c -P 16 -v 4 "$APK"
+          "$APKSIGNER" verify --verbose "$APK"
+          ACTUAL_CERT="$($APKSIGNER verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1 | tr -d ' :\r\n' | tr '[:upper:]' '[:lower:]')"
+          EXPECTED_CERT="$(printf '%s' "$GBOARDHOOKAH_RELEASE_CERT_SHA256" | tr -d ' :\r\n' | tr '[:upper:]' '[:lower:]')"
+          test -n "$ACTUAL_CERT"
+          if [[ "$ACTUAL_CERT" != "$EXPECTED_CERT" ]]; then
+            echo "::error::Release signing certificate fingerprint mismatch"
+            exit 1
+          fi
+          VERSION_NAME="$(sed -n 's/^[[:space:]]*versionName "\([^"]*\)"/\1/p' app/build.gradle | head -n 1)"
+          test -n "$VERSION_NAME"
+          mkdir -p dist
+          DIST_APK="dist/GboardHookah_${VERSION_NAME}.apk"
+          cp "$APK" "$DIST_APK"
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "apk_path=$DIST_APK" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare public release notes
+        shell: bash
+        env:
+          VERSION_NAME: ${{ steps.verify.outputs.version_name }}
+        run: |
+          set -euo pipefail
+          python3 - "$VERSION_NAME" <<'PY'
+          import pathlib
+          import sys
+
+          version = sys.argv[1]
+          lines = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8").splitlines()
+          prefix = f"## [{version}]"
+          start = next((i for i, line in enumerate(lines) if line.startswith(prefix)), None)
+          if start is None:
+              raise SystemExit(f"Missing CHANGELOG section for {version}")
+          end = len(lines)
+          for i in range(start + 1, len(lines)):
+              if lines[i].startswith("## ["):
+                  end = i
+                  break
+          notes = "\n".join(lines[start:end]).strip() + "\n"
+          pathlib.Path("release-notes.md").write_text(notes, encoding="utf-8")
+          PY
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ steps.verify.outputs.version_name }}
+          APK_PATH: ${{ steps.verify.outputs.apk_path }}
+        run: |
+          set -euo pipefail
+          TAG="v$VERSION_NAME"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag already exists: $TAG"
+            exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Release already exists: $TAG"
+            exit 1
+          fi
+          gh release create "$TAG" "$APK_PATH" \
+            --target "$GITHUB_SHA" \
+            --title "GboardHookah $VERSION_NAME" \
+            --notes-file release-notes.md
+
+      - name: Remove signing material
+        if: always()
+        shell: bash
+        run: rm -rf app/AndroidKeystore
