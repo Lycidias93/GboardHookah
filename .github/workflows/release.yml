@@ -85,9 +85,13 @@ jobs:
           test -x "$APKSIGNER"
           "$ZIPALIGN" -c -P 16 -v 4 "$APK"
           "$APKSIGNER" verify --verbose "$APK"
-          ACTUAL_CERT="$($APKSIGNER verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1 | tr -d ' :\r\n' | tr '[:upper:]' '[:lower:]')"
+          CERT_OUTPUT="$("$APKSIGNER" verify --print-certs "$APK")"
+          ACTUAL_CERT="$(printf '%s\n' "$CERT_OUTPUT" | sed -n 's/.*certificate SHA-256 digest:[[:space:]]*//p' | head -n 1 | tr -d ' :\r\n' | tr '[:upper:]' '[:lower:]')"
           EXPECTED_CERT="$(printf '%s' "$GBOARDHOOKAH_RELEASE_CERT_SHA256" | tr -d ' :\r\n' | tr '[:upper:]' '[:lower:]')"
-          test -n "$ACTUAL_CERT"
+          if [[ ! "$ACTUAL_CERT" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Unable to parse release signing certificate SHA-256 digest"
+            exit 1
+          fi
           if [[ "$ACTUAL_CERT" != "$EXPECTED_CERT" ]]; then
             echo "::error::Release signing certificate fingerprint mismatch"
             exit 1
