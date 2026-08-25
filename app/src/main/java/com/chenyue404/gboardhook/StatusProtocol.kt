@@ -10,6 +10,13 @@ object StatusProtocol {
     const val PREF_SNAPSHOT_PRESENT = "runtime_status_snapshot_present"
 
     const val EXTRA_TOKEN = "token"
+    const val EXTRA_CONFIG_PRESENT = "config_present"
+    const val EXTRA_CONFIG_MANUAL_CAPACITY = "config_manual_capacity"
+    const val EXTRA_CONFIG_RETENTION_MS = "config_retention_ms"
+    const val EXTRA_CONFIG_IGNORE_PACKAGE_LIMIT = "config_ignore_package_limit"
+    const val EXTRA_CONFIG_SYNC_ENABLED = "config_sync_enabled"
+    const val EXTRA_CONFIG_DEBUG_LOGGING = "config_debug_logging"
+    const val EXTRA_CONFIG_SOURCE = "config_source"
     const val EXTRA_MODULE_VERSION = "module_version"
     const val EXTRA_GBOARD_VERSION_NAME = "gboard_version_name"
     const val EXTRA_GBOARD_VERSION_CODE = "gboard_version_code"
