@@ -7,11 +7,26 @@ plugins {
 
 def keystorePropertiesFile = file("./AndroidKeystore/keystore.properties")
 def keystoreProperties = new Properties()
-def hasReleaseKeystore = keystorePropertiesFile.exists()
+def hasLocalReleaseKeystore = keystorePropertiesFile.exists()
 
-if (hasReleaseKeystore) {
+if (hasLocalReleaseKeystore) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
+
+def ciReleaseKeystorePath = System.getenv("GBOARDHOOKAH_RELEASE_KEYSTORE_PATH")
+def ciReleaseStorePassword = System.getenv("GBOARDHOOKAH_RELEASE_STORE_PASSWORD")
+def ciReleaseKeyAlias = System.getenv("GBOARDHOOKAH_RELEASE_KEY_ALIAS")
+def ciReleaseKeyPassword = System.getenv("GBOARDHOOKAH_RELEASE_KEY_PASSWORD")
+if (!ciReleaseKeyPassword) {
+    ciReleaseKeyPassword = ciReleaseStorePassword
+}
+def hasCiReleaseSigning = [
+    ciReleaseKeystorePath,
+    ciReleaseStorePassword,
+    ciReleaseKeyAlias,
+    ciReleaseKeyPassword
+].every { value -> value != null && !value.trim().isEmpty() }
+def hasReleaseSigning = hasLocalReleaseKeystore || hasCiReleaseSigning
 
 android {
     compileSdk 31
@@ -20,8 +35,8 @@ android {
         applicationId "com.lycidias93.gboardhookah"
         minSdk 23
         targetSdk 31
-        versionCode 28
-        versionName "1.4.17-hookah.18"
+        versionCode 29
+        versionName "1.4.18-hookah.19"
     }
 
     buildFeatures {
@@ -33,11 +48,18 @@ android {
     }
 
     signingConfigs {
-        if (hasReleaseKeystore) {
+        if (hasCiReleaseSigning) {
+            release {
+                storeFile file(ciReleaseKeystorePath)
+                storePassword ciReleaseStorePassword
+                keyAlias ciReleaseKeyAlias
+                keyPassword ciReleaseKeyPassword
+            }
+        } else if (hasLocalReleaseKeystore) {
             release {
                 storeFile file(keystoreProperties['storeFile'])
                 storePassword keystoreProperties['storePassword']
-                keyAlias keystoreProperties['keyAlias']
+                keyAlias keystoreProperties['keyAlias'])
                 keyPassword keystoreProperties['keyPassword']
             }
         }
@@ -46,15 +68,16 @@ android {
     buildTypes {
         debug {
             minifyEnabled false
-            // CI distributes this variant for direct installation. Keep debug signing,
-            // but do not expose android:debuggable so Android's compatibility checker
-            // does not treat normal user installs as debuggable test apps.
+            // CI debug artifacts are test builds only. Keep them non-debuggable so
+            // Android does not treat normal test installs as debuggable applications.
             debuggable false
         }
         release {
-            minifyEnabled true
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            if (hasReleaseKeystore) {
+            // Xposed entry points are loaded by class name from assets/xposed_init.
+            // Keep the first public stable build behavior aligned with the live-verified
+            // non-minified builds instead of introducing an unverified R8 delta.
+            minifyEnabled false
+            if (hasReleaseSigning) {
                 signingConfig signingConfigs.release
             }
         }
