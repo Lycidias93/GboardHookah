@@ -2,6 +2,12 @@ name: Publish signed GboardHookah release
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the verified build as a GitHub Release
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -89,7 +95,15 @@ jobs:
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "apk_path=$DIST_APK" >> "$GITHUB_OUTPUT"
 
+      - name: Upload signed release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: GboardHookah-signed-release-candidate-${{ steps.verify.outputs.version_name }}
+          path: ${{ steps.verify.outputs.apk_path }}
+          if-no-files-found: error
+
       - name: Prepare public release notes
+        if: ${{ inputs.publish }}
         shell: bash
         env:
           VERSION_NAME: ${{ steps.verify.outputs.version_name }}
@@ -115,6 +129,7 @@ jobs:
           PY
 
       - name: Publish GitHub release
+        if: ${{ inputs.publish }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
