@@ -2,7 +2,7 @@
 
 This changelog contains user-facing changes only. The first public release lists the complete practical delta of the GboardHookah fork from the upstream `chenyue404/GboardHook` baseline it was forked from.
 
-## [1.4.18-hookah.19] - 2026-08-25
+## [1.4.18-hookah.19] - 2026-08-26
 
 Initial public release of the GboardHookah fork.
 
@@ -57,6 +57,6 @@ Initial public release of the GboardHookah fork.
 
 ### Known limitations
 
-- Hook availability depends on the installed Gboard build. On the currently verified Gboard 18.0.3 beta build, the legacy provider path is active and proves uncapped history successfully while one modern Bundle-provider overload is not exposed by that build.
+- Hook availability depends on the installed Gboard build. On the currently verified Gboard 18.1.3 beta build, the legacy provider path is active and proves uncapped history successfully while the modern Bundle-provider overload is not exposed by that build.
 - **Restart Gboard** requires root access. The clipboard hooks themselves still require the normal LSPosed/root environment expected by this project.
 - First-time LSPosed activation or scope changes can still require a device reboot depending on the device/runtime state.
