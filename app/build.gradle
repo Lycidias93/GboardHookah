@@ -32,11 +32,11 @@ android {
     compileSdk 31
 
     defaultConfig {
-        applicationId "com.lycidias93.gboardhookah"
+        applicationId "com.lycidias93.disclinkspoof"
         minSdk 23
         targetSdk 31
-        versionCode 29
-        versionName "1.4.18-hookah.19"
+        versionCode 1
+        versionName "0.1.0-proto1"
     }
 
     buildFeatures {
@@ -68,14 +68,9 @@ android {
     buildTypes {
         debug {
             minifyEnabled false
-            // CI debug artifacts are test builds only. Keep them non-debuggable so
-            // Android does not treat normal test installs as debuggable applications.
             debuggable false
         }
         release {
-            // Xposed entry points are loaded by class name from assets/xposed_init.
-            // Keep the first public stable build behavior aligned with the live-verified
-            // non-minified builds instead of introducing an unverified R8 delta.
             minifyEnabled false
             if (hasReleaseSigning) {
                 signingConfig signingConfigs.release
@@ -94,7 +89,7 @@ android {
             def sdf = new SimpleDateFormat("yyyyMMdd_HHmmss")
             sdf.setTimeZone(TimeZone.getTimeZone("UTC"))
             def formattedDate = sdf.format(date) + "Z"
-            def appName = "GboardHookah"
+            def appName = "DiscLinkSpoof"
             def apkName = "${appName}_${environment}_${versionName}_${versionCode}_${formattedDate}.apk"
             output.outputFileName = apkName
         }
