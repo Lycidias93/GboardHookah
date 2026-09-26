@@ -1,54 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <permission
-        android:name="com.lycidias93.gboardhookah.permission.STATUS"
-        android:protectionLevel="signature" />
-    <uses-permission android:name="com.lycidias93.gboardhookah.permission.STATUS" />
-
-    <queries>
-        <package android:name="com.google.android.inputmethod.latin" />
-    </queries>
-
-    <application android:label="GboardHookah">
-        <activity
-            android:name="com.chenyue404.gboardhook.MainActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
-
-        <receiver
-            android:name="com.chenyue404.gboardhook.RuntimeStatusReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="com.lycidias93.gboardhookah.STATUS_PUSH" />
-                <action android:name="com.lycidias93.gboardhookah.STATUS_REQUEST" />
-            </intent-filter>
-        </receiver>
-
+    <application android:label="DiscLinkSpoof">
         <meta-data
             android:name="xposedmodule"
             android:value="true" />
         <meta-data
             android:name="xposeddescription"
-            android:value="Gboard clipboard capacity and retention hooks with modern query-path support" />
+            android:value="Scoped DISC LINK USB VID/PID compatibility shim for TSSTcorp SN-B063D" />
         <meta-data
             android:name="xposedscope"
             android:resource="@array/xposed_scope" />
         <meta-data
             android:name="xposedminversion"
             android:value="93" />
-        <meta-data
-            android:name="xposedsharedprefs"
-            android:value="true" />
-
     </application>
 
 </manifest>
