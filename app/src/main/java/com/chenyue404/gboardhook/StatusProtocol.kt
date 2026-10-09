@@ -30,6 +30,7 @@ object StatusProtocol {
     const val EXTRA_PRIMARY_CLASS_PRESENT = "primary_class_present"
     const val EXTRA_WATCHERS = "watchers"
     const val EXTRA_OBSERVED_PATHS = "observed_paths"
+    const val EXTRA_HOOK_PROFILE = "hook_profile"
     const val EXTRA_REWRITE_PROOF = "rewrite_proof"
     const val EXTRA_LAST_ERROR = "last_error"
     const val EXTRA_TIMESTAMP_MS = "timestamp_ms"
