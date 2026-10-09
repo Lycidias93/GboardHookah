@@ -52,13 +52,13 @@ jobs:
             -validity 1 \
             -noprompt
 
-      - name: Build CI debug and signed release variants
+      - name: Test and build CI debug and signed release variants
         env:
           GBOARDHOOKAH_RELEASE_KEYSTORE_PATH: AndroidKeystore/ci-release.jks
           GBOARDHOOKAH_RELEASE_STORE_PASSWORD: ci-test-password
           GBOARDHOOKAH_RELEASE_KEY_ALIAS: ci-test
           GBOARDHOOKAH_RELEASE_KEY_PASSWORD: ci-test-password
-        run: ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease --stacktrace
 
       - name: Verify APK structure and 16 KB native-library ZIP alignment
         shell: bash
