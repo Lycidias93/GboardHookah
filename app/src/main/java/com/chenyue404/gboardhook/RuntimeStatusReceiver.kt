@@ -121,6 +121,10 @@ class RuntimeStatusReceiver : BroadcastReceiver() {
                 StatusProtocol.EXTRA_OBSERVED_PATHS,
                 source.getStringExtra(StatusProtocol.EXTRA_OBSERVED_PATHS).orEmpty()
             )
+            .putString(
+                StatusProtocol.EXTRA_HOOK_PROFILE,
+                source.getStringExtra(StatusProtocol.EXTRA_HOOK_PROFILE).orEmpty()
+            )
             .putBoolean(
                 StatusProtocol.EXTRA_REWRITE_PROOF,
                 source.getBooleanExtra(StatusProtocol.EXTRA_REWRITE_PROOF, false)
@@ -195,6 +199,10 @@ class RuntimeStatusReceiver : BroadcastReceiver() {
             .putExtra(
                 StatusProtocol.EXTRA_OBSERVED_PATHS,
                 pref.getString(StatusProtocol.EXTRA_OBSERVED_PATHS, "").orEmpty()
+            )
+            .putExtra(
+                StatusProtocol.EXTRA_HOOK_PROFILE,
+                pref.getString(StatusProtocol.EXTRA_HOOK_PROFILE, "").orEmpty()
             )
             .putExtra(
                 StatusProtocol.EXTRA_REWRITE_PROOF,

@@ -25,6 +25,7 @@ object RuntimeStatus {
         synchronized(observedPaths) { observedPaths.clear() }
         capacityProof = false
         lastError = ""
+        HookProfiler.reset()
     }
 
     fun hookReady(name: String): Boolean = synchronized(hookStates) {

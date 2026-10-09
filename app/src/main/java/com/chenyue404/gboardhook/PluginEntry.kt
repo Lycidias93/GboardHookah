@@ -127,9 +127,11 @@ class PluginEntry : IXposedHookLoadPackage {
                 Context::class.java,
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        val context = param.args.firstOrNull() as? Context ?: return
-                        StatusPluginEntryV3.captureRuntimeContext(context, "primary-application-attach")
+                        val profilerStart = HookProfiler.start()
                         try {
+                            val context = param.args.firstOrNull() as? Context ?: return
+                            StatusPluginEntryV3.captureRuntimeContext(context, "primary-application-attach")
+                            try {
                             val dexBridge by lazy { DexKitBridge.create(classLoader, true) }
                             val sp = context.getSharedPreferences("gboard_hook", Context.MODE_PRIVATE)
                             val spKeyMethodReadConfig = "SP_KEY_METHOD_READ_CONFIG"
@@ -161,9 +163,12 @@ class PluginEntry : IXposedHookLoadPackage {
                             }
 
                             readConfigMethod?.let { hookReadConfig(it, classLoader) }
-                        } catch (t: Throwable) {
-                            StatusPluginEntryV3.reportHookError("gboard-flags", t)
-                            log("flag hook setup failed: $t")
+                            } catch (t: Throwable) {
+                                StatusPluginEntryV3.reportHookError("gboard-flags", t)
+                                log("flag hook setup failed: $t")
+                            }
+                        } finally {
+                            HookProfiler.finish(HookProfiler.APPLICATION_ATTACH_FLAGS, profilerStart)
                         }
                     }
                 }
@@ -184,6 +189,7 @@ class PluginEntry : IXposedHookLoadPackage {
                 String::class.java,
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
+                        val profilerStart = HookProfiler.start()
                         var capacityHandled = false
                         try {
                             val selection = param.args[2]?.toString().orEmpty()
@@ -203,16 +209,31 @@ class PluginEntry : IXposedHookLoadPackage {
                             StatusPluginEntryV3.reportHookError("provider-legacy", t)
                             log("legacy query callback failed: $t")
                         } finally {
-                            StatusPluginEntryV3.reportHookEvent(
-                                param.thisObject,
-                                "provider-legacy",
-                                capacityHandled
-                            )
+                            try {
+                                StatusPluginEntryV3.reportHookEvent(
+                                    param.thisObject,
+                                    "provider-legacy",
+                                    capacityHandled
+                                )
+                            } finally {
+                                HookProfiler.finish(
+                                    HookProfiler.PROVIDER_LEGACY_BEFORE,
+                                    profilerStart
+                                )
+                            }
                         }
                     }
 
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        logCursorCount("legacy query", param.result)
+                        val profilerStart = HookProfiler.start()
+                        try {
+                            logCursorCount("legacy query", param.result)
+                        } finally {
+                            HookProfiler.finish(
+                                HookProfiler.PROVIDER_LEGACY_AFTER,
+                                profilerStart
+                            )
+                        }
                     }
                 }
             )
@@ -231,6 +252,7 @@ class PluginEntry : IXposedHookLoadPackage {
                 CancellationSignal::class.java,
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
+                        val profilerStart = HookProfiler.start()
                         var capacityHandled = false
                         try {
                             if (!syncAndroidClipboardCapacity) return
@@ -297,16 +319,31 @@ class PluginEntry : IXposedHookLoadPackage {
                             StatusPluginEntryV3.reportHookError("provider-bundle", t)
                             log("bundle query callback failed: $t")
                         } finally {
-                            StatusPluginEntryV3.reportHookEvent(
-                                param.thisObject,
-                                "provider-bundle",
-                                capacityHandled
-                            )
+                            try {
+                                StatusPluginEntryV3.reportHookEvent(
+                                    param.thisObject,
+                                    "provider-bundle",
+                                    capacityHandled
+                                )
+                            } finally {
+                                HookProfiler.finish(
+                                    HookProfiler.PROVIDER_BUNDLE_BEFORE,
+                                    profilerStart
+                                )
+                            }
                         }
                     }
 
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        logCursorCount("bundle query", param.result)
+                        val profilerStart = HookProfiler.start()
+                        try {
+                            logCursorCount("bundle query", param.result)
+                        } finally {
+                            HookProfiler.finish(
+                                HookProfiler.PROVIDER_BUNDLE_AFTER,
+                                profilerStart
+                            )
+                        }
                     }
                 }
             )
@@ -444,6 +481,7 @@ class PluginEntry : IXposedHookLoadPackage {
         path: String,
         label: String
     ) {
+        val profilerStart = HookProfiler.start()
         try {
             if (!syncAndroidClipboardCapacity) return
             val table = param.args.getOrNull(tableIndex)?.toString()
@@ -466,6 +504,8 @@ class PluginEntry : IXposedHookLoadPackage {
         } catch (t: Throwable) {
             StatusPluginEntryV3.reportHookError(path, t)
             log("$label callback failed: $t")
+        } finally {
+            HookProfiler.finish(path, profilerStart)
         }
     }
 
@@ -475,6 +515,7 @@ class PluginEntry : IXposedHookLoadPackage {
         path: String,
         label: String
     ) {
+        val profilerStart = HookProfiler.start()
         try {
             if (!syncAndroidClipboardCapacity) return
             val sql = param.args.getOrNull(sqlIndex) as? String ?: return
@@ -492,6 +533,8 @@ class PluginEntry : IXposedHookLoadPackage {
         } catch (t: Throwable) {
             StatusPluginEntryV3.reportHookError(path, t)
             log("$label callback failed: $t")
+        } finally {
+            HookProfiler.finish(path, profilerStart)
         }
     }
 
@@ -502,6 +545,7 @@ class PluginEntry : IXposedHookLoadPackage {
                 "size",
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
+                        val profilerStart = HookProfiler.start()
                         try {
                             val set = param.thisObject as HashSet<*>
                             val instantClassName = "j" + '$' + ".time.Instant"
@@ -526,6 +570,8 @@ class PluginEntry : IXposedHookLoadPackage {
                         } catch (t: Throwable) {
                             StatusPluginEntryV3.reportHookError("hashset-compat", t)
                             log("HashSet compatibility callback failed: $t")
+                        } finally {
+                            HookProfiler.finish(HookProfiler.HASHSET_COMPAT, profilerStart)
                         }
                     }
                 }
@@ -655,6 +701,7 @@ class PluginEntry : IXposedHookLoadPackage {
                 methodName,
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
+                        val profilerStart = HookProfiler.start()
                         try {
                             val name = XposedHelpers
                                 .getObjectField(param.thisObject, "a")
@@ -669,6 +716,8 @@ class PluginEntry : IXposedHookLoadPackage {
                         } catch (t: Throwable) {
                             StatusPluginEntryV3.reportHookError("read-config", t)
                             log("ReadConfig callback failed: $t")
+                        } finally {
+                            HookProfiler.finish(HookProfiler.READ_CONFIG, profilerStart)
                         }
                     }
                 }

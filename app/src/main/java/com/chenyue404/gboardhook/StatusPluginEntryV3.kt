@@ -181,6 +181,7 @@ class StatusPluginEntryV3 : IXposedHookLoadPackage {
                 putBoolean(StatusProtocol.EXTRA_PRIMARY_CLASS_PRESENT, true)
                 putString(StatusProtocol.EXTRA_WATCHERS, RuntimeStatus.hookSummary())
                 putString(StatusProtocol.EXTRA_OBSERVED_PATHS, RuntimeStatus.observedSummary())
+                putString(StatusProtocol.EXTRA_HOOK_PROFILE, HookProfiler.summary())
                 putBoolean(StatusProtocol.EXTRA_REWRITE_PROOF, RuntimeStatus.capacityProof)
                 putString(StatusProtocol.EXTRA_LAST_ERROR, RuntimeStatus.lastError)
                 putLong(StatusProtocol.EXTRA_TIMESTAMP_MS, System.currentTimeMillis())
