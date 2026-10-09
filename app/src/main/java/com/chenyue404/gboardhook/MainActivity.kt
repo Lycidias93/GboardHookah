@@ -459,6 +459,7 @@ class MainActivity : Activity() {
         )
         val watchers = status.getString(StatusProtocol.EXTRA_WATCHERS).orEmpty()
         val observedPaths = status.getString(StatusProtocol.EXTRA_OBSERVED_PATHS).orEmpty()
+        val hookProfile = status.getString(StatusProtocol.EXTRA_HOOK_PROFILE).orEmpty()
         val rewriteProof = status.getBoolean(
             StatusProtocol.EXTRA_REWRITE_PROOF,
             false
@@ -497,6 +498,7 @@ class MainActivity : Activity() {
             appendLine("Debug logging: ${if (debugLogging) "ON" else "OFF"}")
             appendLine("Hook watchers: ${watchers.ifBlank { "none" }}")
             appendLine("Observed query paths: $queryLabel")
+            appendLine("Hook profile: ${hookProfile.ifBlank { "none yet" }}")
             appendLine("Capacity hook proof: $proofLabel")
             append("Errors: $errorLabel")
         }
